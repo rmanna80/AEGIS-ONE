@@ -67,7 +67,7 @@ These should become automated tests (see ROADMAP).
   by a script in headless Chrome once; that script is not in the repository yet.
 - `scripts/setup_wsl.sh` end to end. PX4 was built here with the same tag and `make` target,
   but dependencies were installed by hand rather than through the script.
-- CI has been written (`.github/workflows/ci.yml`) but has not run yet.
+- Simulation tests in CI. The CI workflow (lint, types, backend tests, frontend tests and build) passed on its first run on GitHub; it does not start PX4.
 
 ## Performance
 
