@@ -1,0 +1,61 @@
+@import "tailwindcss";
+
+@theme {
+  --color-ink-950: #080b10;
+  --color-ink-900: #0d1218;
+  --color-ink-800: #141b24;
+  --color-ink-700: #1e2833;
+  --color-ink-600: #2c3947;
+  --color-line: #263341;
+  --color-dim: #7c8b9a;
+  --color-text: #d7e0e8;
+  --color-sim: #f5a524;
+  --color-replay: #a78bfa;
+  --color-ok: #3ecf8e;
+  --color-warn: #f5a524;
+  --color-crit: #ff5d5d;
+  --color-route: #ff8c1a;
+  --color-track: #4cc9f0;
+  --font-mono: ui-monospace, "SF Mono", "Cascadia Mono", "Roboto Mono", Menlo, Consolas, monospace;
+  --font-sans: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--color-ink-950);
+  color: var(--color-text);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  -webkit-font-smoothing: antialiased;
+}
+
+.num {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.panel-title {
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--color-dim);
+}
+
+input[type="number"]::-webkit-inner-spin-button {
+  opacity: 0.4;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-ink-600);
+  border-radius: 4px;
+}
