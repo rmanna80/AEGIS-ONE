@@ -68,7 +68,13 @@ def main() -> int:
     system = call(args.api, "/api/system")
     print(f"mode={system['mode']} provenance={system['provenance']} source={system['source']}")
     if system["provenance"] != "simulated" or not system.get("simulator_attested"):
-        raise SystemExit("Refusing to run: the backend is not attached to an attested simulator.")
+        reason = system.get("attestation_error") or f"provenance is {system['provenance']}"
+        raise SystemExit(
+            "Refusing to run: the backend is not attached to an attested simulator.\n"
+            f"Reason: {reason}\n"
+            "Check that PX4 printed 'Ready for takeoff!' and that the dashboard's "
+            "Vehicle lamp is green, then try again."
+        )
 
     mission = call(args.api, "/api/scenario")["demo_mission"]
     fence = mission["constraints"]["geofence"]["polygon_enu_m"]

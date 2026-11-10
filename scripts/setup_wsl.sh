@@ -39,10 +39,12 @@ python3 -m venv .venv
 .venv/bin/pip install --upgrade pip
 .venv/bin/pip install -e '.[dev]'
 
-if ! command -v node >/dev/null; then
-  echo "Node.js 22+ is required for the dashboard: https://nodejs.org (or 'nvm install 22')." >&2
-else
-  (cd frontend && npm ci && npm run build)
+# The dashboard needs Node.js 20+; Ubuntu 24.04's own package is too old.
+node_major="$(node --version 2>/dev/null | sed -E 's/^v([0-9]+).*/\1/' || true)"
+if [ -z "$node_major" ] || [ "$node_major" -lt 20 ]; then
+  curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
+  sudo apt-get install -y nodejs
 fi
+(cd frontend && npm ci && npm run build)
 [ -f .env ] || cp .env.example .env
 echo "Setup finished. Next: bash scripts/run_px4.sh sih   (see README.md)"

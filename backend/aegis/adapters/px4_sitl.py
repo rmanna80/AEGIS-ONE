@@ -65,6 +65,8 @@ DEFAULT_SIM_AIRFRAMES: dict[int, str] = {
 HEARTBEAT_TIMEOUT_S = 3.0
 # PX4 validates an uploaded mission asynchronously; a start request sent too
 # early is refused ("Switching to Mission is currently not available").
+ATTESTATION_RETRY_S = 2.0
+ATTESTATION_RECHECK_S = 15.0
 MISSION_START_ATTEMPTS = 5
 MISSION_START_CONFIRM_S = 3.0
 
@@ -143,6 +145,7 @@ class PX4SITLAdapter:
             self._spawn(self._pump(name, factory), f"px4-{name}")
         self._spawn(self._watch_connection(), "px4-link")
         self._spawn(self._watch_status_text(), "px4-status-text")
+        self._spawn(self._keep_attested(), "px4-attestation")
         self._spawn(self._supervise_mission(), "px4-mission-supervisor")
         self._spawn(self._watch_mission_progress(), "px4-mission-progress")
 
@@ -186,36 +189,61 @@ class PX4SITLAdapter:
             if state.is_connected and not self._link_up:
                 self._link_up = True
                 log.info("Autopilot heartbeat received")
-                await self._attest_simulator()
             elif not state.is_connected and self._link_up:
                 self._link_up = False
                 self._attested_airframe = None
                 self._attestation_error = "Link to the autopilot was lost."
                 log.warning("Autopilot heartbeat lost")
 
+    async def _keep_attested(self) -> None:
+        """Attest as soon as the link is up, retry until it succeeds, then re-check.
+
+        A single attempt is not enough: PX4 may still be booting when the first
+        heartbeat arrives (the parameter read then times out), and a simulator
+        can be restarted with a different airframe behind the same UDP port.
+        """
+        last_check = 0.0
+        while True:
+            await asyncio.sleep(ATTESTATION_RETRY_S)
+            if not self._link_up:
+                continue
+            due = time.monotonic() - last_check > ATTESTATION_RECHECK_S
+            if not self.attested or due:
+                await self._attest_simulator()
+                last_check = time.monotonic()
+
     async def _attest_simulator(self) -> None:
         """Positively identify the autopilot as a simulation airframe before allowing commands."""
         try:
             autostart = await asyncio.wait_for(
-                self._system.param.get_param_int("SYS_AUTOSTART"), timeout=10.0
+                self._system.param.get_param_int("SYS_AUTOSTART"), timeout=5.0
             )
         except Exception as exc:
-            self._attested_airframe = None
-            self._attestation_error = f"Could not read SYS_AUTOSTART: {exc!r}"
-            log.error(self._attestation_error)
+            if self.attested:
+                # A transient read failure must not lock the operator out of
+                # hold / return / land on a vehicle that was already identified.
+                log.warning("Attestation re-check could not read SYS_AUTOSTART: %r", exc)
+                return
+            error = f"Could not read SYS_AUTOSTART yet ({exc!r}); retrying."
+            if error != self._attestation_error:
+                log.warning(error)
+            self._attestation_error = error
             return
         name = self._sim_airframes.get(int(autostart))
         if name is None:
             self._attested_airframe = None
-            self._attestation_error = (
+            error = (
                 f"SYS_AUTOSTART={autostart} is not a known simulation airframe; "
                 "commands are disabled (telemetry is read-only)."
             )
-            log.error(self._attestation_error)
+            if error != self._attestation_error:
+                log.error(error)
+            self._attestation_error = error
             return
+        if name != self._attested_airframe:
+            log.info("Simulator attested: SYS_AUTOSTART=%s (%s)", autostart, name)
         self._attested_airframe = name
         self._attestation_error = None
-        log.info("Simulator attested: SYS_AUTOSTART=%s (%s)", autostart, name)
 
     # ------------------------------------------------------------------ telemetry
 
