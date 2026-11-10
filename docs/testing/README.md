@@ -8,7 +8,7 @@ are a record of what was observed, not a guarantee.
 
 | Suite | Command | Result |
 | --- | --- | --- |
-| Backend unit + API | `pytest` | 67 passed, 2 skipped (the SITL tests) in 0.6 s |
+| Backend unit + API | `pytest` | 69 passed, 2 skipped (the SITL tests) in 0.6 s |
 | Lint | `ruff check . && ruff format --check .` | clean |
 | Types | `mypy` (strict) | no issues in 12 source files |
 | Frontend unit | `cd frontend && npm test` | 9 passed |

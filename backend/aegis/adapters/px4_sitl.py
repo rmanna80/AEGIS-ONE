@@ -55,11 +55,25 @@ from aegis.missions import (
 
 log = logging.getLogger(__name__)
 
-# PX4 SYS_AUTOSTART ids that only exist as simulation airframes
-# (ROMFS/px4fmu_common/init.d-posix/airframes in PX4 v1.17).
-DEFAULT_SIM_AIRFRAMES: dict[int, str] = {
-    10040: "sih_quadx",
-    4001: "gz_x500",
+# Simulator attestation table.
+#
+# SYS_AUTOSTART alone is NOT sufficient: PX4's hardware firmware reuses some of
+# the same numbers (4001 is "Generic Quadcopter" on a real Pixhawk, and
+# "gz_x500" in SITL). Each entry therefore also lists *evidence parameters* that
+# only exist in POSIX simulation builds of PX4:
+#   SIM_BAT_ENABLE - battery simulator, selected by COMMON_SIMULATION, which
+#                    Kconfig restricts to PLATFORM_POSIX
+#   SIM_GZ_EN      - Gazebo bridge module; set to 1 by the gz airframes
+# A parameter that does not exist cannot be read, so hardware firmware fails
+# the check. ``None`` means "must exist"; a number means "must equal".
+Evidence = tuple[tuple[str, int | None], ...]
+_POSIX_SIM: Evidence = (("SIM_BAT_ENABLE", None),)
+_GAZEBO: Evidence = (*_POSIX_SIM, ("SIM_GZ_EN", 1))
+DEFAULT_SIM_AIRFRAMES: dict[int, tuple[str, Evidence]] = {
+    10040: ("sih_quadx", _POSIX_SIM),
+    4001: ("gz_x500", _GAZEBO),
+    4002: ("gz_x500_depth", _GAZEBO),
+    4010: ("gz_x500_mono_cam", _GAZEBO),
 }
 
 HEARTBEAT_TIMEOUT_S = 3.0
@@ -83,7 +97,7 @@ class PX4SITLAdapter:
         vehicle_id: str = "sim-1",
         connection_url: str = "udpin://0.0.0.0:14540",
         grpc_port: int = 50051,
-        sim_airframes: dict[int, str] | None = None,
+        sim_airframes: dict[int, tuple[str, Evidence]] | None = None,
     ) -> None:
         self.vehicle_id = vehicle_id
         self._url = connection_url
@@ -212,12 +226,20 @@ class PX4SITLAdapter:
                 await self._attest_simulator()
                 last_check = time.monotonic()
 
+    async def _read_int(self, name: str) -> int:
+        value = await asyncio.wait_for(self._system.param.get_param_int(name), timeout=5.0)
+        return int(value)
+
+    def _refuse(self, error: str) -> None:
+        self._attested_airframe = None
+        if error != self._attestation_error:
+            log.error(error)
+        self._attestation_error = error
+
     async def _attest_simulator(self) -> None:
-        """Positively identify the autopilot as a simulation airframe before allowing commands."""
+        """Positively identify the autopilot as a PX4 simulation before allowing commands."""
         try:
-            autostart = await asyncio.wait_for(
-                self._system.param.get_param_int("SYS_AUTOSTART"), timeout=5.0
-            )
+            autostart = await self._read_int("SYS_AUTOSTART")
         except Exception as exc:
             if self.attested:
                 # A transient read failure must not lock the operator out of
@@ -229,19 +251,40 @@ class PX4SITLAdapter:
                 log.warning(error)
             self._attestation_error = error
             return
-        name = self._sim_airframes.get(int(autostart))
-        if name is None:
-            self._attested_airframe = None
-            error = (
+
+        entry = self._sim_airframes.get(autostart)
+        if entry is None:
+            self._refuse(
                 f"SYS_AUTOSTART={autostart} is not a known simulation airframe; "
                 "commands are disabled (telemetry is read-only)."
             )
-            if error != self._attestation_error:
-                log.error(error)
-            self._attestation_error = error
             return
-        if name != self._attested_airframe:
-            log.info("Simulator attested: SYS_AUTOSTART=%s (%s)", autostart, name)
+        name, evidence = entry
+        if name == self._attested_airframe:
+            return  # evidence was already established for this airframe
+
+        for param, required in evidence:
+            try:
+                value = await self._read_int(param)
+            except Exception:
+                self._refuse(
+                    f"SYS_AUTOSTART={autostart} looks like '{name}', but the simulation-only "
+                    f"parameter {param} could not be read. This may be real hardware; "
+                    "commands are disabled."
+                )
+                return
+            if required is not None and value != required:
+                self._refuse(
+                    f"SYS_AUTOSTART={autostart} looks like '{name}', but {param}={value} "
+                    f"(expected {required}); commands are disabled."
+                )
+                return
+        log.info(
+            "Simulator attested: SYS_AUTOSTART=%s (%s), evidence %s",
+            autostart,
+            name,
+            [p for p, _ in evidence],
+        )
         self._attested_airframe = name
         self._attestation_error = None
 

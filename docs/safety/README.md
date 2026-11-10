@@ -10,7 +10,7 @@ aircraft, and nothing here is evidence that one would be safe to fly.
 | The flight controller stays in charge | AEGIS only requests PX4's own modes (Mission, Hold, Return, Land). No offboard setpoints, no actuator commands. | `adapters/px4_sitl.py` |
 | A human authorises every command | Commands need the operator token; the dashboard adds an explicit confirm step before arming | `api.py`, `MissionPanel.tsx` |
 | The operator can always intervene | Hold, Return and Land are available whenever a vehicle is connected, independent of mission state | `api.py` |
-| Know what you are connected to | Commands are refused until `SYS_AUTOSTART` matches a known simulation airframe (10040 SIH, 4001 gz_x500) | `PX4SITLAdapter._attest_simulator` |
+| Know what you are connected to | Commands are refused until `SYS_AUTOSTART` matches a known simulation airframe **and** simulation-only parameters can be read (`SIM_BAT_ENABLE`; plus `SIM_GZ_EN=1` for Gazebo). Retried until it succeeds; reset on link loss. | `PX4SITLAdapter._attest_simulator` |
 | Simulation and reality are never confused | Every state, alert and recording carries provenance; replays are re-labelled | `contracts.py`, `recording.py` |
 | Physical flight cannot be enabled by accident | `AEGIS_MODE=physical` is rejected at startup; no hardware executor exists | `config.py` |
 | Missions are checked before they are sent | Waypoints, legs and the return leg must stay inside the geofence and altitude limits | `missions.validate_mission` |
@@ -21,9 +21,11 @@ aircraft, and nothing here is evidence that one would be safe to fly.
 
 ## Limits of these mechanisms
 
-- **Attestation is a parameter check, not proof.** It stops an accidental connection to an
-  ordinary real vehicle. It does not defend against a real autopilot deliberately configured
-  with a simulation airframe id. Physical operation will need its own adapter, a validated
+- **Attestation is a parameter check, not proof.** The first version checked `SYS_AUTOSTART`
+  only, which was unsound: PX4 hardware firmware reuses simulation numbers (4001 is "Generic
+  Quadcopter" on a real Pixhawk). It now also requires parameters that exist only in PX4's
+  POSIX simulation builds, which stock hardware firmware cannot answer. A custom firmware
+  build could still defeat it. Physical operation will need its own adapter, a validated
   configuration and explicit authorisation; it must not reuse this check.
 - **The operator token is a shared secret over plain HTTP on localhost.** It is a guard against
   accidental commands, not an authentication system. Users, roles and audit logs are Phase 6.
