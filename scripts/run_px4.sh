@@ -27,6 +27,25 @@ SCENARIO_FILE="$REPO_ROOT/simulation/scenarios/$SCENARIO.json"
 BUILD="$PX4_DIR/build/px4_sitl_default"
 [ -x "$BUILD/bin/px4" ] || { echo "PX4 SITL is not built in $PX4_DIR (run scripts/setup_wsl.sh)." >&2; exit 1; }
 
+# A simulator left over from an earlier run (for example after a freeze) blocks a new one
+# and keeps its memory. Refuse to start beside it and say how to clear it.
+LEFTOVER="$(pgrep -af "bin/px4|gz sim|ruby.*gz" | grep -v "run_px4.sh" | cut -c1-110 || true)"
+if [ -n "$LEFTOVER" ]; then
+  if [ "${AEGIS_KILL_STALE:-0}" = "1" ]; then
+    echo "Stopping the simulator left over from an earlier run."
+    pkill -f "bin/px4" || true; pkill -f "gz sim" || true; pkill -f "ruby.*gz" || true
+    sleep 2
+    pkill -9 -f "bin/px4" || true; pkill -9 -f "gz sim" || true; pkill -9 -f "ruby.*gz" || true
+    sleep 1
+  else
+    echo "A simulator is already running:" >&2
+    echo "$LEFTOVER" | sed 's/^/  /' >&2
+    echo "If it is in another terminal, press Ctrl+C there. If it is left over from an" >&2
+    echo "earlier run, start with:  AEGIS_KILL_STALE=1 bash scripts/run_px4.sh $*" >&2
+    exit 1
+  fi
+fi
+
 case "$SIM" in
   sih)
     cd "$BUILD"
