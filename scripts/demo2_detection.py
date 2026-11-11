@@ -131,9 +131,8 @@ def main() -> int:
                         f"{alert['code']} at {time.monotonic() - started:.1f}s "
                         f"({status['phase']}): {alert['message']}"
                     )
-                    print(
-                        f"[{time.monotonic() - started:6.1f}s] CRITICAL ALERT {critical_details[-1]}"
-                    )
+                    elapsed = time.monotonic() - started
+                    print(f"[{elapsed:6.1f}s] CRITICAL ALERT {critical_details[-1]}")
             camera_lost |= "camera.no_frames" in codes
             latest = call(args.api, "/api/perception/latest")["result"]
             if latest:
