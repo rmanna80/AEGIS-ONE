@@ -50,7 +50,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("map", nargs="?", help="map.npz (default: newest session map)")
     parser.add_argument("--scenario", default="urban")
-    parser.add_argument("--search-m", type=float, default=3.0, help="horizontal shift search")
+    parser.add_argument("--search-m", type=float, default=1.5, help="horizontal shift search")
     args = parser.parse_args()
 
     if args.map:
@@ -76,30 +76,22 @@ def main() -> int:
         f"false positives {base['false_positive_voxels']}"
     )
 
-    # Search whole-voxel shifts by how many occupied voxels land exactly on true geometry
-    # (an index lookup per shift; smaller shifts win ties), then score the best one in full.
-    reach = int(round(args.search_m / res))
-    exact = truth.occupied_mask
-    occupied = np.argwhere(live.occupied_mask)
-    shape = np.array(live.log_odds.shape)
-    best_cells, best_precision = (0, 0, 0), -1.0
+    # Score every whole-voxel shift within reach with the same tolerance the accuracy
+    # report uses, and keep the best precision + recall (smaller shifts win ties).
+    reach = max(1, int(round(args.search_m / res)))
     candidates = [
         (dx, dy, dz)
-        for dz in range(-3, 4)
+        for dz in (-1, 0, 1)
         for dx in range(-reach, reach + 1)
         for dy in range(-reach, reach + 1)
     ]
     candidates.sort(key=lambda c: c[0] ** 2 + c[1] ** 2 + c[2] ** 2)
-    for dx, dy, dz in candidates:
-        moved = occupied + np.array([dx, dy, dz])
-        inside = moved[np.all((moved >= 0) & (moved < shape), axis=1)]
-        if len(inside) < 0.9 * len(occupied):
-            continue
-        hits = np.count_nonzero(exact[inside[:, 0], inside[:, 1], inside[:, 2]])
-        precision = hits / max(1, len(inside))
-        if precision > best_precision + 1e-9:
-            best_cells, best_precision = (dx, dy, dz), precision
-    best = (best_precision, best_cells, shifted(live, best_cells).compare_with(truth))
+    best = (-1.0, (0, 0, 0), base)
+    for cells in candidates:
+        candidate = shifted(live, cells).compare_with(truth)
+        score = float(candidate["precision"]) + float(candidate["recall_of_observed_surface"])
+        if score > best[0] + 1e-9:
+            best = (score, cells, candidate)
     _, (dx, dy, dz), report = best
     print(
         f"best shift:    precision {report['precision']:.3f}  "
