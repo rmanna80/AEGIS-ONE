@@ -5,6 +5,7 @@ import { Charts } from "./components/Charts";
 import { Header } from "./components/Header";
 import { MissionPanel } from "./components/MissionPanel";
 import { Overview } from "./components/Overview";
+import { SearchPanel } from "./components/SearchPanel";
 import { useStore } from "./state/store";
 import { useTelemetry } from "./telemetry/useTelemetry";
 import { VideoPanel } from "./components/VideoPanel";
@@ -17,6 +18,8 @@ export default function App() {
   const setPerception = useStore((s) => s.setPerception);
   const setNavigation = useStore((s) => s.setNavigation);
   const setMap = useStore((s) => s.setMap);
+  const setSar = useStore((s) => s.setSar);
+  const sarEnabled = useStore((s) => Boolean(s.sar?.enabled));
   const perceptionEnabled = useStore((s) => Boolean(s.perception?.enabled));
 
   useEffect(() => {
@@ -52,19 +55,32 @@ export default function App() {
           }
         })
         .catch(() => undefined);
+    const loadSar = () =>
+      api
+        .sar()
+        .then((status) => {
+          if (cancelled) return;
+          if (!status.enabled) return setSar(status, []);
+          return api
+            .sarCandidates()
+            .then((list) => !cancelled && setSar(status, list.candidates));
+        })
+        .catch(() => undefined);
     loadSystem();
     loadPerception();
     loadNavigation();
+    loadSar();
     const timer = window.setInterval(() => {
       loadSystem();
       loadPerception();
       loadNavigation();
+      loadSar();
     }, 2000);
     return () => {
       cancelled = true;
       window.clearInterval(timer);
     };
-  }, [setScenario, setSystem, setPerception, setNavigation, setMap]);
+  }, [setScenario, setSystem, setPerception, setNavigation, setMap, setSar]);
 
   return (
     <div className="flex h-full min-w-[1100px] flex-col">
@@ -89,6 +105,7 @@ export default function App() {
         <aside className="flex w-[420px] shrink-0 flex-col overflow-y-auto border-l border-line bg-ink-950">
           <Overview />
           <MissionPanel />
+          {sarEnabled && <SearchPanel />}
           <AlertsPanel />
         </aside>
       </div>

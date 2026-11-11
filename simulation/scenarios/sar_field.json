@@ -1,0 +1,208 @@
+{
+  "scenario_id": "sar_field",
+  "name": "Environment C - Search area",
+  "gazebo_world": "aegis_sar_field",
+  "frame": "ENU metres; origin = vehicle home at the centre of the landing pad; Gazebo world x=east, y=north, z=up",
+  "ground": {
+    "size_m": 400.0
+  },
+  "landing_pad": {
+    "east_m": 0.0,
+    "north_m": 0.0,
+    "radius_m": 1.5
+  },
+  "thermal": {
+    "ambient_c": 12.0,
+    "ground_variation_c": 0.8,
+    "obstacle_offset_c": 1.5,
+    "note": "Surface temperatures for the software thermal camera. Not a physical heat model."
+  },
+  "search_area": {
+    "polygon_enu_m": [
+      [
+        20,
+        -40
+      ],
+      [
+        140,
+        -40
+      ],
+      [
+        140,
+        40
+      ],
+      [
+        20,
+        40
+      ]
+    ],
+    "note": "The area the operator wants searched."
+  },
+  "obstacles": [
+    {
+      "id": "tree_1",
+      "shape": "cylinder",
+      "east_m": 48.0,
+      "north_m": 22.0,
+      "radius_m": 2.5,
+      "height_m": 9.0,
+      "color": "#3f6b3a"
+    },
+    {
+      "id": "tree_2",
+      "shape": "cylinder",
+      "east_m": 96.0,
+      "north_m": -27.0,
+      "radius_m": 3.0,
+      "height_m": 11.0,
+      "color": "#345e33"
+    },
+    {
+      "id": "tree_3",
+      "shape": "cylinder",
+      "east_m": 124.0,
+      "north_m": 12.0,
+      "radius_m": 2.0,
+      "height_m": 8.0,
+      "color": "#47733f"
+    },
+    {
+      "id": "shelter_1",
+      "shape": "box",
+      "east_m": 75.0,
+      "north_m": 30.0,
+      "size_enu_m": [
+        6.0,
+        5.0,
+        2.8
+      ],
+      "yaw_deg": 15.0,
+      "color": "#7b6a55"
+    }
+  ],
+  "heat_sources": [
+    {
+      "id": "person_lying",
+      "kind": "person",
+      "east_m": 62.0,
+      "north_m": -12.0,
+      "size_m": [
+        1.7,
+        0.5
+      ],
+      "yaw_deg": 35.0,
+      "surface_c": 30.0
+    },
+    {
+      "id": "person_sitting",
+      "kind": "person",
+      "east_m": 112.0,
+      "north_m": -8.0,
+      "size_m": [
+        0.7,
+        0.6
+      ],
+      "yaw_deg": 0.0,
+      "surface_c": 31.0
+    },
+    {
+      "id": "person_in_shelter",
+      "kind": "person",
+      "east_m": 75.0,
+      "north_m": 30.0,
+      "size_m": [
+        1.7,
+        0.5
+      ],
+      "yaw_deg": 15.0,
+      "surface_c": 30.0,
+      "expected_detectable": false,
+      "note": "Under the shelter roof: not visible from above."
+    },
+    {
+      "id": "deer",
+      "kind": "animal",
+      "east_m": 35.0,
+      "north_m": 18.0,
+      "size_m": [
+        1.3,
+        0.45
+      ],
+      "yaw_deg": 110.0,
+      "surface_c": 29.0,
+      "note": "Same size and warmth as a person: a deliberate false alarm for the operator to dismiss."
+    },
+    {
+      "id": "warm_rock",
+      "kind": "decoy",
+      "east_m": 128.0,
+      "north_m": -30.0,
+      "radius_m": 1.3,
+      "surface_c": 20.5
+    },
+    {
+      "id": "vehicle_engine",
+      "kind": "decoy",
+      "east_m": 88.0,
+      "north_m": 8.0,
+      "size_m": [
+        1.6,
+        1.4
+      ],
+      "yaw_deg": 70.0,
+      "surface_c": 48.0
+    },
+    {
+      "id": "campfire",
+      "kind": "decoy",
+      "east_m": 44.0,
+      "north_m": -30.0,
+      "radius_m": 0.4,
+      "surface_c": 180.0
+    }
+  ],
+  "demo_mission": {
+    "mission_id": "demo3-transit",
+    "name": "Demo 3 - Fly out along the search area and back",
+    "waypoints": [
+      {
+        "east_m": 30.0,
+        "north_m": 0.0,
+        "altitude_rel_m": 25.0
+      },
+      {
+        "east_m": 130.0,
+        "north_m": 0.0,
+        "altitude_rel_m": 25.0
+      }
+    ],
+    "constraints": {
+      "geofence": {
+        "polygon_enu_m": [
+          [
+            -40,
+            -70
+          ],
+          [
+            170,
+            -70
+          ],
+          [
+            170,
+            70
+          ],
+          [
+            -40,
+            70
+          ]
+        ],
+        "max_altitude_rel_m": 45.0
+      },
+      "min_altitude_rel_m": 5.0,
+      "cruise_speed_m_s": 5.0,
+      "max_leg_length_m": 250.0,
+      "leg_timeout_s": 150.0,
+      "return_to_home_on_complete": true
+    }
+  }
+}

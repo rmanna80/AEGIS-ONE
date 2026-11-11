@@ -30,7 +30,7 @@ from fastapi import (
 )
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from aegis import __version__
 from aegis.adapters.px4_sitl import NotAttestedError, PX4SITLAdapter
@@ -46,6 +46,7 @@ from aegis.missions import (
     validate_mission,
 )
 from aegis.recording import FlightRecorder, RecordedTelemetryAdapter
+from aegis.sar.review import ReviewRequest
 from aegis.watchdog import StallWatchdog, system_snapshot
 
 if TYPE_CHECKING:
@@ -115,6 +116,47 @@ def build_navigation(
                 saved = session / "map.npz"
         if saved is not None:
             service.load_map(saved)
+        return service, ""
+    except (OSError, ValueError, RuntimeError, KeyError) as exc:
+        return None, str(exc)
+
+
+class SarPlanRequest(BaseModel):
+    altitude_rel_m: float | None = Field(default=None, gt=0.0, le=120.0)
+    overlap: float | None = Field(default=None, ge=0.0, lt=0.9)
+
+
+def build_sar(
+    settings: Settings, hub: TelemetryHub, scenario: dict[str, Any], record_dir: Path | None
+) -> tuple[Any, str]:
+    """Create the search-and-rescue service, or explain why it is off. Never raises.
+
+    The service receives the hub (to read state and log events) but not the mission
+    executor: it cannot command the vehicle."""
+    if settings.thermal == "none":
+        return None, "No thermal sensor configured (set AEGIS_THERMAL=model)."
+    if settings.thermal != "model":
+        return None, f"Unknown AEGIS_THERMAL value {settings.thermal!r}."
+    if settings.mode is OperatingMode.REPLAY:
+        return None, "Thermal sensing is not replayed yet."
+    try:
+        from aegis.sar.service import SarService
+        from aegis.sar.thermal import ThermalCameraModel
+    except ImportError as exc:
+        return None, f"Search dependencies are not installed ({exc.name}); see README."
+    try:
+        camera = ThermalCameraModel(
+            scenario, hub.source.get_state, horizontal_fov_deg=settings.thermal_hfov_deg
+        )
+        service = SarService(
+            hub,
+            scenario,
+            camera,
+            save_dir=record_dir,
+            default_altitude_m=settings.sar_altitude_m,
+            default_overlap=settings.sar_overlap,
+            min_delta_c=settings.thermal_min_delta_c,
+        )
         return service, ""
     except (OSError, ValueError, RuntimeError, KeyError) as exc:
         return None, str(exc)
@@ -226,6 +268,9 @@ def create_app(
         navigation, navigation_off_reason = build_navigation(settings, hub, scenario, record_dir)
     if navigation is not None:
         hub.extra_checks.append(navigation.findings)
+    sar, sar_off_reason = build_sar(settings, hub, scenario, record_dir)
+    if sar is not None:
+        hub.extra_checks.append(sar.findings)
     if perception is not None:
         pipeline = perception
 
@@ -286,10 +331,17 @@ def create_app(
                     navigation = None
             else:
                 log.info("Navigation disabled: %s", navigation_off_reason)
+            if sar is not None:
+                await sar.start()
+                log.info("Search support enabled: thermal=%s (advisory only)", settings.thermal)
+            else:
+                log.info("Search support disabled: %s", sar_off_reason)
             yield
         finally:
             # Always runs, including when startup fails part-way, so the MAVSDK
             # server child process is never left behind.
+            if sar is not None:
+                await sar.stop()
             if navigation is not None:
                 await navigation.stop()
             if perception is not None:
@@ -298,6 +350,7 @@ def create_app(
             await watchdog.stop()
 
     app = FastAPI(title="AEGIS ONE", version=__version__, lifespan=lifespan)
+    app.state.sar = sar
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origins,
@@ -546,6 +599,89 @@ def create_app(
         folder = record_dir or settings.data_dir / "maps"
         path = await asyncio.to_thread(navigation.save_map, folder / "map.npz")
         return {"saved": str(path), "load_with": f"AEGIS_NAV_LOAD_MAP={path}"}
+
+    # --------------------------------------------------------- search and rescue
+
+    def require_sar() -> Any:
+        if sar is None:
+            raise HTTPException(409, f"Search support is not enabled. {sar_off_reason}")
+        return sar
+
+    @app.get("/api/sar")
+    async def sar_status() -> dict[str, Any]:
+        if sar is None:
+            return {"enabled": False, "reason": sar_off_reason}
+        status: dict[str, Any] = sar.status()
+        return status
+
+    @app.get("/api/sar/thermal.jpg")
+    async def sar_thermal_image() -> Response:
+        """Latest thermal frame in false colour, detected warm blobs outlined."""
+        jpeg = await asyncio.to_thread(require_sar().thermal_jpeg)
+        if jpeg is None:
+            raise HTTPException(404, "No thermal frame yet.")
+        return Response(
+            content=jpeg, media_type="image/jpeg", headers={"Cache-Control": "no-store"}
+        )
+
+    @app.get("/api/sar/candidates")
+    async def sar_candidates() -> dict[str, Any]:
+        service = require_sar()
+        return {
+            "candidates": [c.model_dump(mode="json") for c in service.candidates()],
+            "awaiting_review": service.registry.awaiting_review(),
+        }
+
+    @app.post("/api/sar/candidates/{candidate_id}/review")
+    async def sar_review(
+        candidate_id: str, request: ReviewRequest, _: MissionExecutor = operator
+    ) -> dict[str, Any]:
+        """Record the operator's decision on a candidate. Commands nothing."""
+        candidate = require_sar().review(candidate_id, request)
+        if candidate is None:
+            raise HTTPException(404, f"No candidate {candidate_id}.")
+        return {"candidate": candidate.model_dump(mode="json")}
+
+    @app.post("/api/sar/plan")
+    async def sar_plan(request: SarPlanRequest) -> dict[str, Any]:
+        """Propose a search pattern over the scenario's search area. Nothing is sent to
+        the vehicle: the operator reviews it and submits it like any mission."""
+        from aegis.sar.coverage import CoveragePlanError
+
+        service = require_sar()
+        try:
+            mission, summary = service.plan(
+                vehicle_start()[:2], request.altitude_rel_m, request.overlap
+            )
+        except CoveragePlanError as exc:
+            raise HTTPException(422, str(exc)) from exc
+        return {
+            "mission": mission.model_dump(mode="json"),
+            "summary": summary,
+            "issues": await mission_issues(mission),
+        }
+
+    @app.get("/api/sar/coverage")
+    async def sar_coverage() -> dict[str, Any]:
+        payload: dict[str, Any] = require_sar().coverage.payload()
+        return payload
+
+    @app.get("/api/sar/accuracy")
+    async def sar_accuracy() -> dict[str, Any]:
+        """Candidates scored against the scenario's ground-truth heat sources."""
+        result: dict[str, Any] = require_sar().accuracy()
+        return result
+
+    @app.get("/api/sar/report")
+    async def sar_report() -> dict[str, Any]:
+        result: dict[str, Any] = require_sar().report()
+        return result
+
+    @app.post("/api/sar/report/save")
+    async def sar_report_save() -> dict[str, Any]:
+        folder = record_dir or settings.data_dir / "reports"
+        saved: dict[str, Any] = await asyncio.to_thread(require_sar().save_report, folder)
+        return {"saved": saved}
 
     # ---------------------------------------------------------------- perception
 

@@ -6,6 +6,7 @@ import { CameraRig } from "./CameraRig";
 import { Environment } from "./Environment";
 import { OccupancyMap } from "./OccupancyMap";
 import { MODEL_SCALE, Quadcopter } from "./Quadcopter";
+import { SearchOverlay } from "./SearchOverlay";
 
 const MODES: { id: CameraMode; label: string; hint: string }[] = [
   { id: "follow", label: "Follow", hint: "Third-person chase camera" },
@@ -26,6 +27,7 @@ export function Scene() {
   const showMap = useStore((s) => s.showMap);
   const toggleMap = useStore((s) => s.toggleMap);
   const mapping = navigation?.enabled && navigation.depth_source !== null;
+  const searching = useStore((s) => Boolean(s.sar?.enabled));
   const vehicleRef = useRef<THREE.Group | null>(null);
 
   return (
@@ -46,6 +48,7 @@ export function Scene() {
         />
         {scenario && <Environment scenario={scenario} />}
         <OccupancyMap />
+        <SearchOverlay />
         <Quadcopter vehicleRef={vehicleRef} />
         <CameraRig vehicleRef={vehicleRef} />
       </Canvas>
@@ -96,6 +99,9 @@ export function Scene() {
           <Legend colour="#f472b6" label="Staged person / vehicle (proxy shape)" />
         )}
         {mapping && <Legend colour="#2dd4bf" label="Mapped obstacle voxel (depth sensor)" />}
+        {searching && (
+          <Legend colour="#facc15" label="Search area / heat source awaiting review" dashed />
+        )}
         <span className="mt-1 text-[9px]">
           Vehicle drawn at {MODEL_SCALE}x scale · 10 m grid · ENU frame
         </span>

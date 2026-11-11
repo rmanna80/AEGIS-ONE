@@ -5,12 +5,15 @@ telemetry/mission backend, and a 3D mission-control dashboard. Intended for auth
 non-weapon robotics research, environmental inspection and search and rescue, always with a
 human operator in control.
 
-**Status: Phases 0 to 2 complete; Phase 3 (navigation and mapping) built and verified with a
-software depth sensor.** A simulated PX4 quadcopter flies geofenced, obstacle-checked waypoint
-missions commanded from the dashboard, with live telemetry, alerts, object detection and
-tracking, 3D occupancy mapping from depth, detour planning, and synchronized recording and
-replay. The Gazebo depth camera link is written but not yet run. Thermal, multi-drone, anomaly
-detection and security monitoring are later phases and are **not** implemented yet (see
+**Status: Phases 0 to 2 complete; Phase 3 (navigation and mapping) and Phase 4 (thermal search
+and rescue) built and verified with software sensor models.** A simulated PX4 quadcopter flies
+geofenced, obstacle-checked waypoint missions commanded from the dashboard, with live telemetry,
+alerts, object detection and tracking, 3D occupancy mapping from depth, detour planning, search
+patterns with a thermal camera model, heat-source candidates that wait for the operator's
+decision, search reports, and synchronized recording and replay. With the Gazebo depth camera
+the map currently misses its accuracy targets because of a heading-estimate error (see
+[docs/testing/README.md](docs/testing/README.md)). Multi-drone, anomaly detection and security
+monitoring are later phases and are **not** implemented yet (see
 [docs/ROADMAP.md](docs/ROADMAP.md)).
 
 No drone hardware is needed. No physical-flight code path exists in this release.
@@ -43,9 +46,12 @@ No drone hardware is needed. No physical-flight code path exists in this release
 | 3D occupancy mapping from depth, save / load, accuracy against ground truth | Verified (Demo 4: precision 0.99, recall 0.93 of observed surface) |
 | Obstacle-aware mission validation (known obstacles + live map) | Verified |
 | Route monitoring with automatic Hold, operator-approved detour planning (A*) | Verified live against PX4 SITL |
-| Gazebo depth camera link (`gazebo-depth` + `gz_camera_bridge.py --depth`) | **Written, not yet run** |
+| Gazebo depth camera link (`gazebo-depth` + `gz_camera_bridge.py --depth`) | Runs on the owner's machine; map accuracy below target (0.63 / 0.59) because the autopilot's heading is a few degrees off |
+| Thermal camera (software model, stabilised mount), heat-source detection and geolocation | Verified (model data only) |
+| Search-pattern planning, coverage tracking, candidate review workflow, search report | Verified live against PX4 SITL (Demo 3: 8 of 8 criteria) |
 | Wind disturbances, depth-image view in the dashboard | Not built |
-| ROS 2 Jazzy bridge, LiDAR, thermal | Not started |
+| Thermal imagery rendered by Gazebo, replay of thermal sessions | Not built |
+| ROS 2 Jazzy bridge, LiDAR | Not started |
 
 "Verified" means it was executed and observed; the commands and results are in
 [docs/testing/README.md](docs/testing/README.md).
@@ -174,6 +180,28 @@ python scripts/demo4_mapping.py --token "$AEGIS_OPERATOR_TOKEN"
 AEGIS_DEPTH=raycast AEGIS_NAV_USE_PRIOR_MAP=false bash scripts/run_backend.sh   # open_field
 python scripts/demo_obstacle_replan.py --token "$AEGIS_OPERATOR_TOKEN"
 ```
+
+## Demo 3: Search and rescue
+
+```bash
+bash scripts/run_px4.sh sih sar_field
+AEGIS_SCENARIO=sar_field AEGIS_THERMAL=model bash scripts/run_backend.sh
+.venv/bin/python scripts/demo3_sar.py --token "$AEGIS_OPERATOR_TOKEN"
+```
+
+The backend plans parallel passes over the scenario's search area for the thermal camera's
+footprint; the operator reviews and starts that mission like any other. During the flight,
+objects clearly warmer than their surroundings are located on the ground and, after three
+sightings, listed in the dashboard's **Search** panel with a size-and-temperature description.
+Each one stays `unreviewed` until the operator confirms or dismisses it. AEGIS never confirms
+a candidate itself and never flies toward one; the search service has no access to vehicle
+commands. `POST /api/sar/report/save` writes `sar_report.json` and `sar_report.md`.
+
+The thermal camera is a software model reading surface temperatures from the scenario file:
+no emissivity, weather, sun or time of day. It sits on an ideal stabilised mount that looks
+straight down. The scenario includes a deer (indistinguishable from a person by size and
+warmth) and a person under a shelter roof (not visible from above), so the demo shows a false
+alarm and a miss as well as the finds.
 
 ## Replaying a session
 

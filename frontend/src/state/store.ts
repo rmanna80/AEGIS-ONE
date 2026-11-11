@@ -3,6 +3,8 @@ import type {
   Mission,
   NavigationStatus,
   PerceptionStatus,
+  SarCandidate,
+  SarStatus,
   Scenario,
   Snapshot,
   SystemInfo,
@@ -31,6 +33,8 @@ interface Store {
   scenario: Scenario | null;
   perception: PerceptionStatus | null;
   navigation: NavigationStatus | null;
+  sar: SarStatus | null;
+  sarCandidates: SarCandidate[];
   /** Occupied voxel centres of the live map, flat [x, y, z, ...] in three.js coordinates. */
   mapVoxels: Float32Array;
   mapResolution: number;
@@ -52,6 +56,7 @@ interface Store {
   setScenario: (scenario: Scenario) => void;
   setPerception: (perception: PerceptionStatus) => void;
   setNavigation: (navigation: NavigationStatus) => void;
+  setSar: (sar: SarStatus, candidates: SarCandidate[]) => void;
   setMap: (voxelsEnu: number[], resolution: number, revision: number) => void;
   toggleMap: () => void;
   setDraft: (draft: Mission) => void;
@@ -66,6 +71,8 @@ export const useStore = create<Store>((set, get) => ({
   scenario: null,
   perception: null,
   navigation: null,
+  sar: null,
+  sarCandidates: [],
   mapVoxels: new Float32Array(0),
   mapResolution: 0.5,
   mapRevision: -1,
@@ -82,6 +89,7 @@ export const useStore = create<Store>((set, get) => ({
   setSystem: (system) => set({ system }),
   setPerception: (perception) => set({ perception }),
   setNavigation: (navigation) => set({ navigation }),
+  setSar: (sar, sarCandidates) => set({ sar, sarCandidates }),
   toggleMap: () => set((s) => ({ showMap: !s.showMap })),
   setMap: (voxelsEnu, mapResolution, mapRevision) => {
     // ENU (east, north, up) -> three.js (x = east, y = up, z = -north)

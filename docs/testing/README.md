@@ -8,9 +8,9 @@ are a record of what was observed, not a guarantee.
 
 | Suite | Command | Result |
 | --- | --- | --- |
-| Backend unit + API + perception + navigation | `pytest` | 146 passed, 3 skipped (2 SITL tests, 1 needing the COCO8 images) |
+| Backend unit + API + perception + navigation + search | `pytest` | 172 passed, 1 skipped here (the SITL tests are collected separately) |
 | Lint | `ruff check . && ruff format --check .` | clean |
-| Types | `mypy` (strict) | no issues in 12 source files |
+| Types | `mypy` (strict) | no issues in 35 source files |
 | Frontend unit | `cd frontend && npm test` | 9 passed |
 | Frontend build | `cd frontend && npm run build` | type-checks and builds |
 | Live simulation | `AEGIS_SITL_TESTS=1 pytest tests/simulation -v` | 2 passed in 145 s |
@@ -191,23 +191,58 @@ filter, save / load, A* (no corner cutting, no-route case), detour planning, ret
 checking, the automatic Hold (once per mission, off when disabled), proximity alerts, lost depth
 sensing, and the API paths (rejection before upload, planning, map endpoints, map reload).
 
+## Search and rescue results (Phase 4, measured 2026-11-11)
+
+PX4 v1.17.0 SITL on the built-in simulator, `sar_field` scenario, software thermal camera
+(160 x 120 px, 57 deg, 4 Hz, 0.08 C noise, ideal stabilised mount), search at 25 m.
+
+**Demo 3:** 8 of 8 criteria, 230 s from upload to disarm.
+
+| Item | Result |
+| --- | --- |
+| Planned pattern | 4 passes, 27.1 m swath, 20 m spacing, 576 m |
+| Search area seen by the camera | 100% |
+| Thermal frames processed | 969 |
+| Heat sources visible from above | 6 of 6 listed as candidates |
+| Person under the shelter roof | Not found (expected: not visible from above) |
+| Candidates with no source behind them | 0 |
+| "Person-sized" candidates | 3: two people and the deer |
+| Candidates confirmed before the operator's review | 0 |
+| Review without the operator token | Refused (401) |
+
+Read these with care:
+
+- Reported position errors were 0.00-0.01 m. That is not a real-world figure: the model
+  renders from the same pose estimate that geolocation then uses, so pose error cancels, as it
+  did for the software depth sensor. Under Gazebo the heading error alone moved a depth map by
+  about half a metre.
+- The first run found only 2 of 6. With the camera fixed to the body, the vehicle's 26 deg
+  lean at cruise in this simulator exceeded the detector's 25 deg tilt limit for almost the
+  whole flight. The camera model now sits on an ideal stabilised mount (a real one has lag and
+  travel limits).
+- The script, not a person, submitted the mission and entered the review decisions, using the
+  scenario's answer key. It exercises the workflow; it says nothing about how well a person
+  would judge the candidates.
+
+Unit tests cover the camera model's geometry (position, heading, occlusion under a roof),
+geolocation from an offset and tilted view, candidate merging and review rules, pattern
+planning for wide, tall and triangular areas, coverage accounting, the API's token check, and
+that neither a detection nor a confirmation issues a vehicle command.
+
 ## Not tested yet
+
+- Demo 3 under Gazebo, and the Search panel driven by a person through a whole flight (it was
+  loaded and screenshotted after the flight here).
+- The Gazebo ground-truth pose path (`gz_camera_bridge.py --depth` pose subscription, scoring
+  map, pose-error report). The owner reports the run worked; the numbers were not captured.
 
 - Anything under Gazebo by me (not installable on the bootstrap machine). The project owner
   reports the Gazebo launch works on WSL2.
 - A complete Demo 2 run at 6 m. The owner's run at 6 m tracked `person`, `car` and `truck`
   through the return leg; the final verdict was not captured.
-- A completed Gazebo depth run. Owner's attempts on 2026-11-11: (1) no frames, because the
-  bridge looked for the wrong topic (fixed); (2) depth frames arrived and were fused at about
-  4.5 Hz, the mission started and reached waypoint 1 with the simulation at 0.50x, then from
-  about 45 s in MAVSDK reported heartbeat timeouts and slow callbacks, parameter reads timed
-  out, depth frames stopped and the dashboard went stale. Cause not established; consistent
-  with Gazebo (two cameras at 30 Hz) stalling the machine. Not reproduced here: the backend fed
-  640x480 depth at 15 Hz kept telemetry gaps under 0.15 s.
-- Mapping accuracy with Gazebo depth, where rendered models differ from the ground-truth boxes.
 - Mapping while the simulation runs well below real time.
 - Detection on Gazebo-rendered imagery (rendered people and vehicles may detect poorly).
-- ROS 2, and every Phase 3+ capability.
+- ROS 2, and every Phase 5+ capability.
 - PX4 geofence breach behaviour, wind, in-simulator sensor faults.
 - Browser end-to-end tests (Playwright) and React component tests. The dashboard was driven
   by a script in headless Chrome once; that script is not in the repository yet.

@@ -7,25 +7,28 @@
 | 0 | Architecture and setup | Done |
 | 1 | Working 3D simulation, telemetry, waypoint mission, dashboard | Done (SIH verified; Gazebo launch confirmed by the owner) |
 | 2 | Perception: simulated RGB camera, detection, tracking, recording | Done. Demo 2 reported passing on Gazebo by the owner (at 4 m; route since raised to 6 m). |
-| 3 | Navigation and mapping: depth, occupancy, planning, wind | Built and verified with the software depth sensor. Gazebo depth link unverified; wind and SLAM not built. |
-| 4 | Thermal and search and rescue | Not started |
+| 3 | Navigation and mapping: depth, occupancy, planning, wind | Built and verified with the software depth sensor. Gazebo depth runs on the owner's machine but the map misses its accuracy targets (heading-estimate error). Wind and SLAM not built. |
+| 4 | Thermal and search and rescue | Built and verified live on PX4 SITL with a software thermal model (Demo 3: 8 of 8). No Gazebo-rendered thermal imagery; no thermal replay. |
 | 5 | Multi-drone simulation | Not started |
 | 6 | Cybersecurity and anomaly detection | Not started |
 | 7 | Raspberry Pi integration | Not started |
 | 8 | Physical hardware readiness (documentation and gating only) | Not started |
 
-## Next milestone: close Phase 3 on Gazebo, start Phase 4
+## Next milestone: heading error, then Phase 5
 
-1. Re-run Demo 2 at the urban route's 6 m altitude.
-2. Run the Gazebo depth path (`run_px4.sh gazebo-depth urban`, `AEGIS_DEPTH=stream`,
-   `gz_camera_bridge.py --depth`) and Demo 4 with it. Expect to adjust the pixel-format mapping,
-   field of view and range; expect lower accuracy than with the software sensor.
+1. Heading estimate under Gazebo. On the pad the autopilot reports about 95 deg where Gazebo has
+   the model at 90 deg; the depth map lands about half a metre east and fails Demo 4. Record the
+   owner's Demo 4 numbers with the new true-pose scoring (not captured yet), find why PX4's
+   heading is off in the generated world, and re-run.
+2. Find the process behind the slow memory decline (about 75 MB per 10 s) in Gazebo depth runs,
+   and the fast one with stock 1080p cameras.
 3. Remaining Phase 3 items: wind (Gazebo wind plugin), a depth-image view in the dashboard,
-   pose estimation from sensors (SLAM / visual odometry; today the map uses PX4's pose), map
-   uncertainty display, Environment D (indoor, GNSS-denied). ROS 2 enters here if an
-   established SLAM package is adopted.
-4. Phase 4: simulated thermal sensor, heat-source segmentation, search-area coverage planning,
-   human-confirmation workflow, mission reports (Demo 3).
+   pose estimation from sensors (SLAM / visual odometry), map uncertainty display,
+   Environment D (indoor, GNSS-denied).
+4. Remaining Phase 4 items: thermal imagery rendered by Gazebo (its thermal camera sensor),
+   pose error injected into the thermal model, terrain that is not flat, replay of thermal
+   sessions, coverage shown on the 3D view, a Gazebo run of Demo 3.
+5. Phase 5: multi-drone simulation.
 
 ## Known defects and limitations
 

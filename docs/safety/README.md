@@ -19,6 +19,8 @@ aircraft, and nothing here is evidence that one would be safe to fly.
 | Unreachable waypoints do not hang forever | Per-leg timeout, then Hold and a `stalled` status | `px4_sitl._supervise_mission` |
 | Monitors advise; the one automatic action is to stop | Alerts for link loss, stale data, battery, GNSS, estimator, geofence and obstacles. When the route ahead is blocked or depth sensing is lost during a mission, AEGIS requests PX4's Hold mode once and reports `blocked`. It never steers or resumes; the operator plans a detour or intervenes. Can be turned off with `AEGIS_NAV_AUTO_HOLD=false`. | `safety.py`, `navigation/service.py` |
 | Routes are checked against obstacles before upload | A mission passing within the clearance distance (3 m) of a known or mapped obstacle is refused and never sent | `navigation/planner.py`, `api.py` |
+| Detections are for a person to judge | Heat-source candidates start `unreviewed`; only an authenticated operator decision makes one `confirmed` or `dismissed`. Descriptions give size and temperature, never identity. | `sar/candidates.py`, `api.py` |
+| Finding something never moves the vehicle | The search service is constructed without the mission executor, so it has no way to command the vehicle; a candidate or a confirmation triggers no flight action. Tests assert no command is issued. | `api.build_sar`, `sar/service.py`, `tests/test_sar.py` |
 
 ## Limits of these mechanisms
 

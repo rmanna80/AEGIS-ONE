@@ -283,3 +283,51 @@ export type MapPayload =
       /** flat [east, north, up, ...] voxel centres in metres (ENU) */
       voxels: number[];
     };
+
+// --- Search and rescue (mirrors backend/aegis/sar)
+
+export type SarStatus =
+  | { enabled: false; reason: string }
+  | {
+      enabled: true;
+      thermal_source: string | null;
+      thermal_provenance: Provenance | null;
+      frames_processed: number;
+      frame_age_s: number | null;
+      candidates: number;
+      awaiting_review: number;
+      coverage_fraction: number;
+      search_area_enu_m: [number, number][];
+      default_altitude_m: number;
+      last_error: string | null;
+      advisory_only: true;
+    };
+
+export type ReviewStatus = "unreviewed" | "confirmed" | "dismissed";
+
+export interface SarCandidate {
+  candidate_id: string;
+  east_m: number;
+  north_m: number;
+  category: string;
+  peak_c: number;
+  ambient_c: number;
+  area_m2: number;
+  observations: number;
+  provenance: Provenance;
+  status: ReviewStatus;
+  review_note: string;
+}
+
+export interface SarPlan {
+  mission: Mission;
+  issues: string[];
+  summary: {
+    passes: number;
+    altitude_rel_m: number;
+    swath_width_m: number;
+    pass_spacing_m: number;
+    path_length_m: number;
+    estimated_search_time_s: number;
+  };
+}

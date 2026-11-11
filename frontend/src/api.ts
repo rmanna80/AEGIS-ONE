@@ -4,6 +4,10 @@ import type {
   MissionStatus,
   NavigationStatus,
   PerceptionStatus,
+  ReviewStatus,
+  SarCandidate,
+  SarPlan,
+  SarStatus,
   Scenario,
   SystemInfo,
 } from "./types";
@@ -63,6 +67,16 @@ export const api = {
   perception: () => request<PerceptionStatus>("/api/perception"),
   selectTrack: (trackId: number | null) =>
     post<{ selected_track_id: number | null }>("/api/perception/select", { track_id: trackId }),
+  sar: () => request<SarStatus>("/api/sar"),
+  sarCandidates: () =>
+    request<{ candidates: SarCandidate[]; awaiting_review: number }>("/api/sar/candidates"),
+  sarPlan: () => post<SarPlan>("/api/sar/plan", {}),
+  sarReview: (candidateId: string, decision: ReviewStatus, note: string, token: string) =>
+    post<{ candidate: SarCandidate }>(
+      `/api/sar/candidates/${encodeURIComponent(candidateId)}/review`,
+      { decision, note },
+      token,
+    ),
   hold: (token: string) => post<unknown>("/api/vehicle/hold", undefined, token),
   returnHome: (token: string) => post<unknown>("/api/vehicle/return", undefined, token),
   land: (token: string) => post<unknown>("/api/vehicle/land", undefined, token),

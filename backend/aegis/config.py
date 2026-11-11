@@ -68,6 +68,15 @@ class Settings(BaseSettings):
     nav_auto_hold: bool = True
     nav_load_map: Path | None = None  # start from a previously saved map.npz
 
+    # Search and rescue (optional). thermal: "none" or "model" (software thermal camera
+    # against the scenario's heat sources; works on any simulator). Needs a scenario
+    # with a search_area. Advisory only: it never commands the vehicle.
+    thermal: str = "none"
+    thermal_hfov_deg: float = 57.0
+    thermal_min_delta_c: float = 5.0
+    sar_altitude_m: float = 25.0
+    sar_overlap: float = 0.2
+
     broadcast_hz: float = 10.0
     cors_origins: list[str] = ["http://localhost:5173", "http://127.0.0.1:5173"]
 
