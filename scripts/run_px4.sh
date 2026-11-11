@@ -49,14 +49,25 @@ case "$SIM" in
     fi
     # Gazebo renders camera sensors with OpenGL. Without GPU acceleration that falls back
     # to the CPU (llvmpipe), which is the usual reason a camera simulation runs far below real time.
+    renderer() { glxinfo -B 2>/dev/null | grep -i "OpenGL renderer" | cut -d: -f2- | xargs || true; }
     if command -v glxinfo >/dev/null; then
-      RENDERER="$(glxinfo -B 2>/dev/null | grep -i "OpenGL renderer" | cut -d: -f2- | xargs || true)"
-      echo "Graphics renderer: ${RENDERER:-unknown}"
+      RENDERER="$(renderer)"
       case "$RENDERER" in
         *llvmpipe*|*softpipe*|"")
-          echo "WARNING: Gazebo will render on the CPU. Expect the simulation to run well below" >&2
-          echo "         real time with cameras. Try AEGIS_LIGHT_SENSORS=1 and HEADLESS=1, and see" >&2
-          echo "         docs/simulation/README.md (GPU acceleration under WSL2)." >&2 ;;
+          # Ubuntu 24.04 under WSL2 ships the Direct3D 12 driver but does not select it.
+          # If it works here, use it for this launch (AEGIS_NO_GPU=1 to opt out).
+          if [ "${AEGIS_NO_GPU:-0}" != "1" ] && [ -z "${GALLIUM_DRIVER:-}" ] \
+             && GALLIUM_DRIVER=d3d12 glxinfo -B 2>/dev/null | grep -qi "renderer string: D3D12"; then
+            export GALLIUM_DRIVER=d3d12
+            RENDERER="$(renderer)"
+            echo "Graphics renderer: $RENDERER  (GPU enabled for this launch via GALLIUM_DRIVER=d3d12)"
+          else
+            echo "Graphics renderer: ${RENDERER:-unknown}"
+            echo "WARNING: Gazebo will render on the CPU. Expect the simulation to run well below" >&2
+            echo "         real time with cameras. Try AEGIS_LIGHT_SENSORS=1 and HEADLESS=1, and see" >&2
+            echo "         docs/simulation/README.md (GPU acceleration under WSL2)." >&2
+          fi ;;
+        *) echo "Graphics renderer: $RENDERER" ;;
       esac
     else
       echo "Tip: 'sudo apt install mesa-utils' lets this script report whether Gazebo has GPU acceleration."

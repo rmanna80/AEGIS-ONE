@@ -79,8 +79,12 @@ unusable. Camera sensors are the cost: PX4's stock models render 1920x1080 colou
 depth at 30 Hz (`gazebo-depth`) or 1280x960 at 30 Hz (`gazebo-cam`).
 
 1. **Check the renderer.** `run_px4.sh` prints it. `llvmpipe` means Gazebo is rendering on the
-   CPU. Under WSL2, GPU acceleration needs a current Windows GPU driver and WSLg
-   (`wsl --update` from PowerShell); `glxinfo -B` should then name your GPU (often via "D3D12").
+   CPU. Ubuntu 24.04 under WSL2 ships Mesa's Direct3D 12 driver but does not select it, so the
+   script tries `GALLIUM_DRIVER=d3d12` and uses it for the launch when that yields a `D3D12 (...)`
+   renderer (`AEGIS_NO_GPU=1` opts out). On the owner's machine this reports
+   `D3D12 (AMD Radeon(TM) Graphics)`. With more than one GPU, pick one with
+   `MESA_D3D12_DEFAULT_ADAPTER_NAME` (a substring of its name, e.g. `NVIDIA`). If D3D12 is not
+   offered at all: `wsl --update`, `wsl --shutdown`, and a current Windows GPU driver.
 2. **Lighten the cameras:** `AEGIS_LIGHT_SENSORS=1 bash scripts/run_px4.sh gazebo-depth urban`
    drops them to 640x360 + 320x240 at 10 Hz (and `gazebo-cam` to 640x480 at 15 Hz). It edits two
    model files in your PX4 checkout, keeps the originals, and restores them the next time you
@@ -89,7 +93,9 @@ depth at 30 Hz (`gazebo-depth`) or 1280x960 at 30 Hz (`gazebo-cam`).
 4. **Use the built-in simulator** (`sih`) with `AEGIS_DEPTH=raycast` when you only need
    mapping and planning, not rendered imagery.
 
-None of the Gazebo performance advice has been measured by this project yet.
+Measured on the owner's machine (software rendering): stock `gazebo-depth` ran at 0.5x and then
+stalled; with `AEGIS_LIGHT_SENSORS=1 HEADLESS=1` it held 1.00x through a full mission. Gazebo on
+the D3D12 renderer has not been run yet.
 
 ## Ports
 
