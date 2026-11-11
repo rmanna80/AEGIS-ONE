@@ -48,6 +48,9 @@ class Settings(BaseSettings):
     detector_model: Path = REPO_ROOT / "models" / "yolo11n.onnx"
     detector_confidence: float = 0.35
     detector_labels: list[str] = []  # empty = every class the model knows
+    # CPU threads for inference. 0 = half the cores, at most 4, so the detector
+    # does not starve the simulator (a starved simulator runs below real time).
+    detector_threads: int = 0
 
     broadcast_hz: float = 10.0
     cors_origins: list[str] = ["http://localhost:5173", "http://127.0.0.1:5173"]

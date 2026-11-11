@@ -8,7 +8,7 @@ are a record of what was observed, not a guarantee.
 
 | Suite | Command | Result |
 | --- | --- | --- |
-| Backend unit + API + perception | `pytest` | 113 passed, 3 skipped (2 SITL tests, 1 needing the COCO8 images) |
+| Backend unit + API + perception | `pytest` | 118 passed, 3 skipped (2 SITL tests, 1 needing the COCO8 images) |
 | Lint | `ruff check . && ruff format --check .` | clean |
 | Types | `mypy` (strict) | no issues in 12 source files |
 | Frontend unit | `cd frontend && npm test` | 9 passed |
@@ -108,6 +108,20 @@ during the return leg, and a critical alert was raised (cause not yet identified
 also produced 64 spurious `airplane` tracks at up to 0.90 confidence plus a few other false
 classes; the urban scenario now restricts the detector to people and road vehicles. Demo 2 has
 therefore **not passed yet**.
+
+The critical alert was `link.lost`, and it was a false alarm caused by my code. With the camera
+rendering, Gazebo ran at roughly 0.3x real time (the same 22 m leg took 38 s against 12 s on the
+built-in simulator). PX4's 1 Hz heartbeat is in simulation time, so it arrived about every 3 s of
+wall time and tripped a 3 s wall-clock link timeout. Reproduced here by running the built-in
+simulator with `PX4_SIM_SPEED_FACTOR=0.3`: the link flapped every 3 s, and a mission submitted
+in that state crashed the MAVSDK server process. Fixes, all verified at 0.3x:
+
+- Link health is judged from telemetry freshness in simulation time; the measured real-time
+  factor is shown in the dashboard and a `sim.slow` warning is raised below 0.5x.
+- Waypoint leg timeouts are counted on the vehicle clock.
+- Commands wait for a current MAVSDK heartbeat, and the MAVSDK server is restarted
+  automatically if it exits (killed on purpose here: back and re-attested within 25 s).
+- Demo 1 at 0.3x: 5 of 5 criteria, 447 s, no critical alerts.
 
 **Urban scenario**: the mission (three waypoints at 4 m, then return) was flown on the built-in
 simulator, which has no buildings to hit. Route clearance from every obstacle is asserted by

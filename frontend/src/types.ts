@@ -23,6 +23,8 @@ export interface VehicleState {
   recorded_provenance: Provenance | null;
   received_at_unix_s: number;
   vehicle_time_s: number | null;
+  /** Simulation seconds per wall-clock second (1 = real time); null when unknown. */
+  sim_real_time_factor?: number | null;
   connected: boolean;
   armed: boolean | null;
   in_air: boolean | null;

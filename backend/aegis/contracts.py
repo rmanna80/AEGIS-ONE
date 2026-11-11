@@ -102,6 +102,9 @@ class VehicleState(_Model):
 
     received_at_unix_s: float  # host wall clock when the snapshot was assembled
     vehicle_time_s: float | None = None  # time since autopilot boot (sim time in SITL)
+    # Simulation seconds per wall-clock second, measured by AEGIS; None when unknown
+    # or not a simulation. 1.0 = real time.
+    sim_real_time_factor: float | None = None
 
     connected: bool
     armed: bool | None = None
@@ -127,6 +130,7 @@ class VehicleState(_Model):
         "position_enu_m",
         "ground_speed_m_s",
         "vertical_speed_up_m_s",
+        "sim_real_time_factor",
     )
 
 

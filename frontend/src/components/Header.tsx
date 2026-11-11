@@ -58,6 +58,17 @@ export function Header() {
           value={clock(state?.vehicle_time_s)}
           title="Autopilot clock (simulation time under SITL lockstep)"
         />
+        {state?.sim_real_time_factor != null && (
+          <div
+            className="text-right leading-tight"
+            title="Simulation speed relative to real time, measured from the autopilot clock. Below 1.0 the simulator cannot keep up and everything takes longer."
+          >
+            <div className="panel-title">Sim speed</div>
+            <div className={`num text-[13px] ${state.sim_real_time_factor < 0.5 ? "text-warn" : ""}`}>
+              {state.sim_real_time_factor.toFixed(2)}x
+            </div>
+          </div>
+        )}
         {playback && (
           <Clock
             label={`Playback ${playback.speed}x`}

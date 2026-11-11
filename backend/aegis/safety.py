@@ -22,6 +22,7 @@ class SafetyLimits:
     battery_critical_fraction: float = 0.15
     geofence_margin_m: float = 5.0
     min_satellites: int = 6
+    slow_simulation_factor: float = 0.5
 
 
 Finding = tuple[str, Severity, str]  # (code, severity, message)
@@ -44,6 +45,17 @@ def evaluate(
     if age > limits.stale_after_s:
         findings.append(("telemetry.stale", Severity.CRITICAL, f"Telemetry is {age:.1f} s old."))
         return findings
+
+    rtf = state.sim_real_time_factor
+    if rtf is not None and rtf < limits.slow_simulation_factor:
+        findings.append(
+            (
+                "sim.slow",
+                Severity.WARNING,
+                f"Simulation is running at {rtf:.2f}x real time; everything takes "
+                f"{1 / max(rtf, 0.01):.1f}x longer on the wall clock.",
+            )
+        )
 
     if state.battery is not None and state.battery.remaining_fraction is not None:
         remaining = state.battery.remaining_fraction

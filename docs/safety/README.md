@@ -33,8 +33,10 @@ aircraft, and nothing here is evidence that one would be safe to fly.
   simulation yet.
 - **Low-battery, GNSS-loss and estimator alerts are unit-tested with injected states only.**
   They have not been triggered by faults inside the simulator.
-- **Watchdog scope**: link loss is detected from missing telemetry within 3 s. There is no
-  watchdog on the backend process itself.
+- **Watchdog scope**: link loss is detected from missing telemetry within 3 s of simulation
+  time (the timeout stretches when the simulator runs slowly, up to 60 s of wall time). The
+  MAVSDK server process is restarted if it exits; while it is down AEGIS cannot see or command
+  the vehicle, which stays under PX4's control. There is no watchdog on the backend itself.
 
 ## Fault-injection status (brief section 9)
 

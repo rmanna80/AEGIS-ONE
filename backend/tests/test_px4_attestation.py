@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
+import pytest
+
 from aegis.adapters.px4_sitl import PX4SITLAdapter
 
 SIH = {"SYS_AUTOSTART": 10040, "SIM_BAT_ENABLE": 1}
@@ -108,3 +110,62 @@ async def test_recheck_follows_a_simulator_swap() -> None:
     autopilot.params = dict(GAZEBO)
     await adapter._attest_simulator()
     assert adapter.source == "px4_sitl:gz_x500"
+
+
+# ----------------------------------------------------- link state under slow simulation
+
+
+def feed_clock(adapter: PX4SITLAdapter, wall_start: float, factor: float, seconds: float) -> float:
+    """Feed attitude timestamps as a simulator running at ``factor`` x real time would."""
+    wall = wall_start
+    for i in range(int(seconds * 10) + 1):
+        wall = wall_start + i * 0.1
+        adapter._note_vehicle_clock(wall, 100.0 + i * 0.1 * factor)
+    return wall
+
+
+def test_real_time_factor_is_measured_from_the_vehicle_clock() -> None:
+    adapter = PX4SITLAdapter()
+    assert adapter.real_time_factor is None
+    feed_clock(adapter, 1000.0, factor=0.32, seconds=4.0)
+    assert adapter.real_time_factor == pytest.approx(0.32, abs=0.01)
+    assert adapter._link_timeout_s() == pytest.approx(3.0 / 0.32, rel=0.05)
+
+    fast = PX4SITLAdapter()
+    feed_clock(fast, 1000.0, factor=1.0, seconds=4.0)
+    assert fast.real_time_factor == pytest.approx(1.0, abs=0.01)
+    assert fast._link_timeout_s() == pytest.approx(3.0)
+
+    faster = PX4SITLAdapter()  # faster than real time never shortens the timeout
+    feed_clock(faster, 1000.0, factor=4.0, seconds=4.0)
+    assert faster._link_timeout_s() == pytest.approx(3.0)
+
+
+def test_slow_simulation_does_not_look_like_a_lost_link(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Regression: Gazebo at ~0.3x real time made the link flap and raised link.lost."""
+    import aegis.adapters.px4_sitl as module
+
+    now = [1000.0]
+    monkeypatch.setattr(module.time, "monotonic", lambda: now[0])
+    adapter = PX4SITLAdapter()
+    assert adapter._connected() is False  # nothing received yet
+
+    now[0] = feed_clock(adapter, 1000.0, factor=0.3, seconds=5.0)
+    adapter._last_rx = now[0]
+    now[0] += 5.0  # 5 s of wall-clock silence = 1.5 s of simulation: still healthy
+    assert adapter._connected() is True
+    now[0] += 6.0  # 11 s wall = 3.3 s of simulation: now it really is lost
+    assert adapter._connected() is False
+
+    realtime = PX4SITLAdapter()
+    now[0] = feed_clock(realtime, 2000.0, factor=1.0, seconds=5.0)
+    realtime._last_rx = now[0]
+    now[0] += 3.5
+    assert realtime._connected() is False  # at 1x the usual 3 s still applies
+
+
+def test_vehicle_clock_reset_restarts_the_estimate() -> None:
+    adapter = PX4SITLAdapter()
+    feed_clock(adapter, 1000.0, factor=1.0, seconds=3.0)
+    adapter._note_vehicle_clock(1004.0, 1.0)  # autopilot rebooted: clock went backwards
+    assert adapter.real_time_factor is None

@@ -11,6 +11,7 @@ import asyncio
 import hmac
 import json
 import logging
+import os
 import secrets
 import time
 from collections.abc import AsyncIterator
@@ -87,6 +88,7 @@ def build_perception(
             settings.detector_model,
             confidence_threshold=settings.detector_confidence,
             allowed_labels=settings.detector_labels or None,
+            threads=settings.detector_threads or max(1, min(4, (os.cpu_count() or 2) // 2)),
         )
     except (OSError, ValueError, RuntimeError) as exc:
         return None, str(exc)

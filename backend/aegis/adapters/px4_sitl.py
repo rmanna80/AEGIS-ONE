@@ -25,7 +25,7 @@ import logging
 import math
 import time
 from collections import deque
-from collections.abc import AsyncIterator, Awaitable, Callable
+from collections.abc import Awaitable, Callable
 from typing import Any
 
 import mavsdk_grpc as mavsdk
@@ -76,7 +76,12 @@ DEFAULT_SIM_AIRFRAMES: dict[int, tuple[str, Evidence]] = {
     4010: ("gz_x500_mono_cam", _GAZEBO),
 }
 
-HEARTBEAT_TIMEOUT_S = 3.0
+# Link loss is judged from telemetry freshness, in *simulation* seconds: a heavy
+# simulation (Gazebo rendering cameras) can run well below real time, and a
+# wall-clock timeout would then report a healthy link as lost.
+LINK_TIMEOUT_S = 3.0
+MIN_REAL_TIME_FACTOR = 0.05  # below this the timeout stops stretching (60 s wall)
+RTF_WINDOW_S = 5.0
 # PX4 validates an uploaded mission asynchronously; a start request sent too
 # early is refused ("Switching to Mission is currently not available").
 ATTESTATION_RETRY_S = 2.0
@@ -112,7 +117,12 @@ class PX4SITLAdapter:
         self._t: dict[str, Any] = {}  # latest raw telemetry by stream name
         self._last_rx = 0.0  # monotonic time of the last position/attitude sample
         self.messages: deque[AutopilotMessage] = deque(maxlen=50)  # PX4 status texts
-        self._link_up = False
+        self._link_was_up = False
+        self._mavsdk_connected = False  # MAVSDK's own heartbeat state (3 s wall clock)
+        self._restarting = False
+        self.bridge_restarts = 0
+        # (wall monotonic s, vehicle clock s) samples for the real-time-factor estimate
+        self._clock_samples: deque[tuple[float, float]] = deque()
 
         self._status = MissionStatus()
         self._mission: Mission | None = None
@@ -141,22 +151,22 @@ class PX4SITLAdapter:
         self._system = mavsdk.System(port=self._grpc_port)
         log.info("Connecting to PX4 SITL at %s", self._url)
         await self._system.connect(system_address=self._url)
-        tel = self._system.telemetry
-        streams: dict[str, Callable[[], AsyncIterator[Any]]] = {
-            "position": tel.position,
-            "velocity": tel.velocity_ned,
-            "quaternion": tel.attitude_quaternion,
-            "battery": tel.battery,
-            "gps_info": tel.gps_info,
-            "flight_mode": tel.flight_mode,
-            "armed": tel.armed,
-            "in_air": tel.in_air,
-            "landed_state": tel.landed_state,
-            "health": tel.health,
-            "home": tel.home,
+        streams = {
+            "position": "position",
+            "velocity": "velocity_ned",
+            "quaternion": "attitude_quaternion",
+            "battery": "battery",
+            "gps_info": "gps_info",
+            "flight_mode": "flight_mode",
+            "armed": "armed",
+            "in_air": "in_air",
+            "landed_state": "landed_state",
+            "health": "health",
+            "home": "home",
         }
-        for name, factory in streams.items():
-            self._spawn(self._pump(name, factory), f"px4-{name}")
+        for name, method in streams.items():
+            self._spawn(self._pump(name, method), f"px4-{name}")
+        self._spawn(self._watch_server(), "px4-mavsdk-watchdog")
         self._spawn(self._watch_connection(), "px4-link")
         self._spawn(self._watch_status_text(), "px4-status-text")
         self._spawn(self._keep_attested(), "px4-attestation")
@@ -166,18 +176,66 @@ class PX4SITLAdapter:
     def _spawn(self, coro: Awaitable[None], name: str) -> None:
         self._tasks.append(asyncio.create_task(coro, name=name))  # type: ignore[arg-type]
 
-    async def _pump(self, name: str, factory: Callable[[], AsyncIterator[Any]]) -> None:
+    async def _pump(self, name: str, method: str) -> None:
         while True:
             try:
-                async for sample in factory():
+                # Looked up each time: after a MAVSDK restart the plugin objects are new.
+                async for sample in getattr(self._system.telemetry, method)():
                     self._t[name] = sample
                     if name in ("position", "quaternion"):
                         self._last_rx = time.monotonic()
+                    if name == "quaternion" and sample.timestamp_us:
+                        self._note_vehicle_clock(self._last_rx, sample.timestamp_us / 1e6)
             except asyncio.CancelledError:
                 raise
-            except Exception:
-                log.exception("Telemetry stream %s failed; retrying", name)
+            except Exception as exc:
+                if not self._restarting:
+                    log.warning(
+                        "Telemetry stream %s failed (%s); retrying", name, type(exc).__name__
+                    )
             await asyncio.sleep(1.0)
+
+    async def _watch_server(self) -> None:
+        """Restart the MAVSDK server child process if it dies.
+
+        The vehicle is unaffected by such a crash: PX4 keeps flying its mission or
+        failsafe on its own. AEGIS only loses its view and its ability to command
+        until the bridge is back, so that is reported loudly.
+        """
+        while True:
+            await asyncio.sleep(2.0)
+            process = getattr(self._system, "_server_process", None)
+            if process is None or process.poll() is None:
+                continue
+            self.bridge_restarts += 1
+            self._restarting = True
+            self._mavsdk_connected = False
+            message = (
+                f"MAVSDK bridge process exited (code {process.returncode}); restarting it. "
+                "The vehicle remains under PX4 control."
+            )
+            log.error(message)
+            self.messages.append(
+                AutopilotMessage(
+                    vehicle_id=self.vehicle_id,
+                    provenance=self.provenance,
+                    level="AEGIS_ERROR",
+                    text=message,
+                    received_at_unix_s=time.time(),
+                )
+            )
+            if self._status.phase in (MissionPhase.UPLOADING, MissionPhase.ACTIVE):
+                self._set_status(
+                    MissionPhase.FAILED,
+                    "Lost the MAVSDK bridge; mission progress is no longer tracked. "
+                    "Check the vehicle and use Hold / Return / Land once the link is back.",
+                )
+            try:
+                await self._system.connect(system_address=self._url)
+            except Exception:
+                log.exception("Could not restart the MAVSDK bridge; will try again")
+            finally:
+                self._restarting = False
 
     async def _watch_status_text(self) -> None:
         while True:
@@ -198,16 +256,62 @@ class PX4SITLAdapter:
                 log.exception("Status text stream failed; retrying")
             await asyncio.sleep(1.0)
 
+    def _note_vehicle_clock(self, wall_s: float, vehicle_s: float) -> None:
+        samples = self._clock_samples
+        if samples and vehicle_s < samples[-1][1]:
+            samples.clear()  # the autopilot restarted
+        samples.append((wall_s, vehicle_s))
+        while len(samples) > 2 and wall_s - samples[0][0] > RTF_WINDOW_S:
+            samples.popleft()
+
+    @property
+    def real_time_factor(self) -> float | None:
+        """Simulation seconds per wall-clock second over the last few seconds."""
+        samples = self._clock_samples
+        if len(samples) < 2:
+            return None
+        wall = samples[-1][0] - samples[0][0]
+        if wall < 1.0:
+            return None
+        return (samples[-1][1] - samples[0][1]) / wall
+
+    def _link_timeout_s(self) -> float:
+        rtf = self.real_time_factor
+        if rtf is None:
+            return LINK_TIMEOUT_S
+        return LINK_TIMEOUT_S / max(MIN_REAL_TIME_FACTOR, min(1.0, rtf))
+
     async def _watch_connection(self) -> None:
-        async for state in self._system.core.connection_state():
-            if state.is_connected and not self._link_up:
-                self._link_up = True
-                log.info("Autopilot heartbeat received")
-            elif not state.is_connected and self._link_up:
-                self._link_up = False
-                self._attested_airframe = None
-                self._attestation_error = "Link to the autopilot was lost."
-                log.warning("Autopilot heartbeat lost")
+        """Track MAVSDK's own heartbeat state. MAVSDK uses a fixed 3 s wall-clock
+        timeout, which flaps when the simulation runs slowly, so the link state
+        shown to the operator comes from :meth:`_connected` instead. Commands,
+        however, are only sent while MAVSDK itself considers the system connected
+        (see :meth:`_await_heartbeat`)."""
+        while True:
+            try:
+                async for state in self._system.core.connection_state():
+                    self._mavsdk_connected = bool(state.is_connected)
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                self._mavsdk_connected = False
+            await asyncio.sleep(1.0)
+
+    async def _await_heartbeat(self, timeout_s: float = 20.0) -> None:
+        """Wait until MAVSDK has a current heartbeat before sending it a command.
+
+        MAVSDK v4.0.5's server was observed to crash when asked to upload a
+        geofence while it considered the system timed out, which happens between
+        heartbeats whenever the simulator runs slower than about 0.33x real time.
+        """
+        deadline = time.monotonic() + timeout_s
+        while not self._mavsdk_connected:
+            if time.monotonic() > deadline:
+                raise RuntimeError(
+                    "No autopilot heartbeat within "
+                    f"{timeout_s:.0f} s (the simulation may be running too slowly)."
+                )
+            await asyncio.sleep(0.05)
 
     async def _keep_attested(self) -> None:
         """Attest as soon as the link is up, retry until it succeeds, then re-check.
@@ -219,7 +323,16 @@ class PX4SITLAdapter:
         last_check = 0.0
         while True:
             await asyncio.sleep(ATTESTATION_RETRY_S)
-            if not self._link_up:
+            up = self._connected()
+            if up and not self._link_was_up:
+                log.info("Autopilot telemetry link up")
+            elif not up and self._link_was_up:
+                log.warning("Autopilot telemetry link lost")
+                self._attested_airframe = None  # whatever reconnects must be identified again
+                self._attestation_error = "Link to the autopilot was lost."
+                self._clock_samples.clear()
+            self._link_was_up = up
+            if not up:
                 continue
             due = time.monotonic() - last_check > ATTESTATION_RECHECK_S
             if not self.attested or due:
@@ -303,7 +416,9 @@ class PX4SITLAdapter:
         return f"px4_sitl:{self._attested_airframe or 'unattested'}"
 
     def _connected(self) -> bool:
-        return self._link_up and (time.monotonic() - self._last_rx) < HEARTBEAT_TIMEOUT_S
+        if self._last_rx == 0.0:
+            return False
+        return (time.monotonic() - self._last_rx) < self._link_timeout_s()
 
     async def get_state(self) -> VehicleState:
         t = self._t
@@ -396,6 +511,7 @@ class PX4SITLAdapter:
             source=self.source,
             received_at_unix_s=time.time(),
             vehicle_time_s=vehicle_time,
+            sim_real_time_factor=self.real_time_factor,
             connected=connected,
             armed=t.get("armed"),
             in_air=t.get("in_air"),
@@ -483,13 +599,14 @@ class PX4SITLAdapter:
                 return MissionResult(accepted=False, status=self._status)
 
             self._mission = mission
-            self._last_progress_at = time.monotonic()
+            self._last_progress_at = self._mission_clock()
             self._set_status(MissionPhase.ACTIVE, "Mission started.")
             return MissionResult(accepted=True, status=self._status)
 
     async def _upload_and_start(self, mission: Mission, origin: LocalOrigin) -> None:
         o = origin.geodetic
         c = mission.constraints
+        await self._await_heartbeat()
 
         fence_points = []
         for east, north in c.geofence.polygon_enu_m:
@@ -558,7 +675,7 @@ class PX4SITLAdapter:
                     if self._status.phase is not MissionPhase.ACTIVE:
                         continue
                     if progress.current != self._status.current_waypoint:
-                        self._last_progress_at = time.monotonic()
+                        self._last_progress_at = self._mission_clock()
                     done = progress.total > 0 and progress.current >= progress.total
                     if done:
                         rtl = bool(
@@ -583,13 +700,21 @@ class PX4SITLAdapter:
                 log.exception("Mission progress stream failed; retrying")
             await asyncio.sleep(1.0)
 
+    def _mission_clock(self) -> float:
+        """Seconds on the vehicle's clock (simulation time), so leg timeouts mean the
+        same thing whether the simulator runs at 1x or 0.3x. Wall clock as fallback."""
+        q = self._t.get("quaternion")
+        if q is not None and q.timestamp_us:
+            return float(q.timestamp_us) / 1e6
+        return time.monotonic()
+
     async def _supervise_mission(self) -> None:
         """Detect unreachable waypoints and the end of the return-to-home leg."""
         while True:
             await asyncio.sleep(1.0)
             phase = self._status.phase
             if phase is MissionPhase.ACTIVE and self._mission is not None:
-                waited = time.monotonic() - self._last_progress_at
+                waited = self._mission_clock() - self._last_progress_at
                 if waited > self._mission.constraints.leg_timeout_s:
                     log.warning("Waypoint not reached in %.0f s; commanding hold", waited)
                     with contextlib.suppress(Exception):
@@ -608,6 +733,7 @@ class PX4SITLAdapter:
 
     async def _intervene(self, action: Callable[[], Awaitable[None]], message: str) -> None:
         self._require_attested()
+        await self._await_heartbeat(timeout_s=10.0)
         await action()
         if self._status.phase in (
             MissionPhase.ACTIVE,

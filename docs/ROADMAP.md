@@ -33,6 +33,10 @@
   distributing a product. The backend interface accepts any compatible ONNX model.
 - No user-defined object classes yet (needs a fine-tuned model).
 - Camera frames claiming `physical` provenance are refused until Phase 7.
+- Gazebo with the camera ran at about 0.3x real time on the owner's WSL2 machine; the cause
+  (software rendering, camera resolution or CPU contention) has not been established.
+- MAVSDK v4.0.5's server crashed when commanded while it considered the system timed out.
+  Worked around (commands wait for a heartbeat; the server is restarted), not fixed upstream.
 - Replay has no pause or seek; speed and session are fixed at backend start.
 - Mission validation ignores obstacles. Shipped routes are checked for 5 m clearance by a test,
   but a route edited in the dashboard is not; the urban street has buildings 6 m from the route.

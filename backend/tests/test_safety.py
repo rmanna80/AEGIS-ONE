@@ -103,3 +103,13 @@ def test_alerts_carry_provenance() -> None:
     alert = tracker.update(state, [("link.lost", Severity.CRITICAL, "x")], time.time())[0]
     assert alert.provenance is state.provenance
     assert alert.vehicle_id == state.vehicle_id
+
+
+def test_slow_simulation_is_a_warning_not_a_link_fault() -> None:
+    now = time.time()
+    slow = make_state(sim_real_time_factor=0.32)
+    findings = evaluate(slow, now, LIMITS)
+    assert [(code, severity) for code, severity, _ in findings] == [("sim.slow", Severity.WARNING)]
+    assert "0.32x" in findings[0][2]
+    assert evaluate(make_state(sim_real_time_factor=0.95), now, LIMITS) == []
+    assert evaluate(make_state(sim_real_time_factor=None), now, LIMITS) == []
