@@ -8,9 +8,34 @@ from typing import Any
 
 import numpy as np
 
+from aegis import frames
 from aegis.contracts import Provenance
-from aegis.navigation.depth import DepthFrame
+from aegis.navigation.depth import DepthFrame, Pose
 from aegis.perception.cameras import ACCEPTED_PROVENANCE, StreamCameraAdapter
+
+
+def _truth_pose(header: dict[str, Any], provenance: Provenance) -> Pose | None:
+    """Optional simulator ground-truth pose: ``{"position_enu_m": [e, n, u],
+    "quaternion_wxyz_flu_enu": [w, x, y, z]}``. Only a simulator can know it, so it is
+    ignored for any other provenance; malformed values are ignored rather than trusted."""
+    raw = header.get("truth_pose")
+    if provenance is not Provenance.SIMULATED or not isinstance(raw, dict):
+        return None
+    try:
+        position = [float(v) for v in raw["position_enu_m"]]
+        quaternion = [float(v) for v in raw["quaternion_wxyz_flu_enu"]]
+    except (KeyError, TypeError, ValueError):
+        return None
+    if len(position) != 3 or len(quaternion) != 4:
+        return None
+    if not all(math.isfinite(v) for v in position + quaternion):
+        return None
+    if abs(math.sqrt(sum(c * c for c in quaternion)) - 1.0) > 0.01:
+        return None
+    w, x, y, z = quaternion
+    return Pose(
+        (position[0], position[1], position[2]), frames.flu_enu_to_frd_ned_quaternion((w, x, y, z))
+    )
 
 
 class DepthStreamAdapter(StreamCameraAdapter):
@@ -72,6 +97,7 @@ class DepthStreamAdapter(StreamCameraAdapter):
             source=f"stream:{str(header.get('source', 'unknown'))[:64]}",
             captured_at_unix_s=time.time(),
             pose=None,  # paired with the latest telemetry pose by the navigation service
+            truth_pose=_truth_pose(header, provenance),
         )
         self._new_frame.set()
 

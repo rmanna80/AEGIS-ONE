@@ -142,6 +142,33 @@ All with PX4 v1.17.0 SITL on the built-in simulator and the software depth senso
 | Recall of the obstacle surface that was observed | 0.932 |
 | Surface coverage | 0.120: one pass down a street only sees the faces that front it |
 
+**What that result does not show.** The software depth sensor renders from the same estimated
+pose the mapper then uses, so pose-estimate error cancels out of it. Gazebo renders from where
+the vehicle really is.
+
+**Demo 4 with the Gazebo depth camera (reported by the owner, WSL2, reduced cameras):** 3 of 5
+criteria; the mission, depth fusion and map save passed, accuracy failed.
+
+| Metric | Value |
+| --- | --- |
+| Depth frames fused | 371 at scoring (518 in the saved map) |
+| Precision | 0.630 (pass mark 0.90) |
+| Recall of the observed surface | 0.590 (pass mark 0.80) |
+| Same map moved 0.5 m west (`scripts/analyze_map.py`) | precision 0.904, recall 0.814 |
+
+Analysis of the saved map and flight log (done here): both street walls are mapped about
+0.5-0.75 m east of where they are; the recorded track stays within 0.1 m of the centreline. On
+the pad Gazebo reports the model at yaw 0 (facing east, heading 90 deg) while the autopilot
+reports heading 95.3 deg. Integrating software-rendered depth with a deliberately biased heading
+reproduces the failure (precision / recall: 0.99 / 0.99 at 0 deg, 0.86 / 0.95 at 2 deg,
+0.58 / 0.78 at 3.5 deg, 0.51 / 0.19 at 5.26 deg). The in-flight heading error has not been
+measured yet, and why PX4's heading estimate is off in this world is not known.
+
+To measure it, the Gazebo depth bridge now attaches the simulator's ground-truth pose to each
+frame. AEGIS integrates a second, scoring-only map with it and reports both scores plus the
+autopilot's pose error (`/api/map/accuracy`). Route checks and holds never use the true pose.
+This path has unit tests for the frame conversion and parsing but has NOT been run on Gazebo.
+
 **Obstacle detection and replanning (open field, tower unknown to the route checker):** 6 of 6
 criteria. The mission was accepted, the tower was mapped in flight, Hold was commanded with the
 conflict 14 m ahead, and the vehicle stopped 11.7 m from the tower. A two-waypoint detour was

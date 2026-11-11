@@ -107,6 +107,9 @@ def ned_to_enu(north: float, east: float, down: float) -> Vec:
     return east, north, -down
 
 
+Quat = tuple[float, float, float, float]
+
+
 def quaternion_to_euler_deg(w: float, x: float, y: float, z: float) -> Vec:
     """Body(FRD)->NED quaternion to aerospace ZYX Euler angles (roll, pitch, yaw) in degrees."""
     roll = math.atan2(2.0 * (w * x + y * z), 1.0 - 2.0 * (x * x + y * y))
@@ -133,3 +136,29 @@ def rotate_body_to_ned(q_wxyz: tuple[float, float, float, float], v_body: Vec) -
 def wrap_heading_deg(yaw_deg: float) -> float:
     """Map any yaw angle to a compass heading in [0, 360)."""
     return yaw_deg % 360.0
+
+
+def _quaternion_multiply(a: Quat, b: Quat) -> Quat:
+    aw, ax, ay, az = a
+    bw, bx, by, bz = b
+    return (
+        aw * bw - ax * bx - ay * by - az * bz,
+        aw * bx + ax * bw + ay * bz - az * by,
+        aw * by - ax * bz + ay * bw + az * bx,
+        aw * bz + ax * by - ay * bx + az * bw,
+    )
+
+
+def flu_enu_to_frd_ned_quaternion(q_wxyz: Quat) -> Quat:
+    """Convert a body(FLU)->world(ENU) quaternion (Gazebo, ROS) to body(FRD)->NED (PX4).
+
+    R_ned_frd = P * R_enu_flu * D, with D the half-turn about body x (FRD -> FLU) and
+    P the half-turn about the (1, 1, 0) axis (ENU -> NED).
+    """
+    half = math.sqrt(0.5)
+    q = _quaternion_multiply(
+        _quaternion_multiply((0.0, half, half, 0.0), q_wxyz), (0.0, 1.0, 0.0, 0.0)
+    )
+    norm = math.sqrt(sum(c * c for c in q)) or 1.0
+    sign = -1.0 if q[0] < 0 else 1.0
+    return (sign * q[0] / norm, sign * q[1] / norm, sign * q[2] / norm, sign * q[3] / norm)

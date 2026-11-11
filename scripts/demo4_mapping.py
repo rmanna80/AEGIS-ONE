@@ -93,6 +93,21 @@ def main() -> int:
         f"{accuracy['recall_of_observed_surface']:.3f}  surface coverage "
         f"{accuracy['surface_coverage']:.3f}"
     )
+    reference = accuracy.get("with_simulator_truth_pose")
+    if reference:
+        error = accuracy.get("pose_error") or {}
+        print(
+            f"  same frames with the simulator's true pose (scoring only): precision "
+            f"{reference['precision']:.3f}  recall {reference['recall_of_observed_surface']:.3f}"
+        )
+        print(
+            f"  autopilot pose error vs simulator truth: heading "
+            f"{error.get('heading_error_deg_mean')} deg mean "
+            f"(max {error.get('heading_error_deg_max_abs')}), horizontal "
+            f"{error.get('horizontal_error_m_mean')} m mean "
+            f"(max {error.get('horizontal_error_m_max')})"
+        )
+        print("  criteria 3 and 4 are judged on the autopilot-pose map, not the true-pose one.")
     print(f"  saved: {saved_path}")
     write_report(
         "demo4_mapping",

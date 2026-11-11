@@ -619,3 +619,58 @@ def test_mission_is_refused_before_takeoff_when_the_depth_sensor_is_silent(tmp_p
         refused = client.post("/api/missions", json=body, headers=AUTH).json()
         assert refused["accepted"] is False and refused["status"]["phase"] == "rejected"
         assert vehicle.commands == []
+
+
+def test_gazebo_quaternion_converts_to_px4_convention() -> None:
+    import math
+
+    from aegis import frames
+
+    # Gazebo identity: body x (forward) along world x (east) -> heading 90 deg in NED.
+    q = frames.flu_enu_to_frd_ned_quaternion((1.0, 0.0, 0.0, 0.0))
+    roll, pitch, yaw = frames.quaternion_to_euler_deg(*q)
+    assert (round(roll, 6), round(pitch, 6), round(yaw, 6)) == (0.0, 0.0, 90.0)
+    # Gazebo yaw +90 deg (counter-clockwise from east) faces north -> heading 0.
+    half = math.sqrt(0.5)
+    q = frames.flu_enu_to_frd_ned_quaternion((half, 0.0, 0.0, half))
+    assert abs(frames.quaternion_to_euler_deg(*q)[2]) < 1e-6
+    # Gazebo pitch +10 deg about FLU y (left) is nose DOWN -> PX4 pitch -10 deg.
+    a = math.radians(10.0) / 2
+    q = frames.flu_enu_to_frd_ned_quaternion((math.cos(a), 0.0, math.sin(a), 0.0))
+    roll, pitch, yaw = frames.quaternion_to_euler_deg(*q)
+    assert abs(pitch + 10.0) < 1e-6 and abs(yaw - 90.0) < 1e-6 and abs(roll) < 1e-6
+    # Forward axis lands where it should: FRD x -> NED east for the identity pose.
+    north, east, down = frames.rotate_body_to_ned(
+        frames.flu_enu_to_frd_ned_quaternion((1.0, 0.0, 0.0, 0.0)), (1.0, 0.0, 0.0)
+    )
+    assert abs(east - 1.0) < 1e-9 and abs(north) < 1e-9 and abs(down) < 1e-9
+
+
+def test_depth_stream_truth_pose_is_parsed_and_only_for_simulated_frames() -> None:
+    import numpy as np
+
+    from aegis.contracts import Provenance
+    from aegis.navigation.depth_stream import DepthStreamAdapter, _truth_pose
+
+    adapter = DepthStreamAdapter("127.0.0.1", 0, 73.0, 19.0)
+    truth = {"position_enu_m": [1.0, 2.0, 3.0], "quaternion_wxyz_flu_enu": [1.0, 0.0, 0.0, 0.0]}
+    header = {
+        "width": 4,
+        "height": 2,
+        "encoding": "depth32f",
+        "provenance": "simulated",
+        "truth_pose": truth,
+    }
+    adapter._accept(header, np.full((2, 4), 5.0, dtype="<f4").tobytes())
+    frame = adapter._latest_depth
+    assert frame is not None and frame.truth_pose is not None
+    assert frame.truth_pose.position_enu_m == (1.0, 2.0, 3.0)
+    assert frame.pose is None  # mapping still pairs the frame with the autopilot estimate
+    assert _truth_pose({"truth_pose": truth}, Provenance.REPLAYED) is None
+    for bad in (
+        {"position_enu_m": [1, 2], "quaternion_wxyz_flu_enu": [1, 0, 0, 0]},
+        {"position_enu_m": [1, 2, 3], "quaternion_wxyz_flu_enu": [9, 0, 0, 0]},
+        {"position_enu_m": [1, 2, float("nan")], "quaternion_wxyz_flu_enu": [1, 0, 0, 0]},
+        "nonsense",
+    ):
+        assert _truth_pose({"truth_pose": bad}, Provenance.SIMULATED) is None

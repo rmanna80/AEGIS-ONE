@@ -20,10 +20,11 @@ from typing import Any
 
 import numpy as np
 
+from aegis import frames
 from aegis.contracts import Severity
 from aegis.hub import TelemetryHub
 from aegis.missions import Mission, MissionPhase
-from aegis.navigation.depth import DepthFrame, DepthSource, pose_from_state
+from aegis.navigation.depth import DepthFrame, DepthSource, Pose, pose_from_state
 from aegis.navigation.geometry import SceneGeometry
 from aegis.navigation.occupancy import GridSpec, OccupancyGrid
 from aegis.navigation.planner import Point3, RouteChecker
@@ -34,6 +35,7 @@ log = logging.getLogger(__name__)
 DEPTH_STALE_S = 2.0  # in simulation seconds
 LOOKAHEAD_M = 30.0
 MAX_VOXELS_SENT = 15000
+MAX_POSE_ERROR_SAMPLES = 5000
 MAX_MAP_UPDATE_HZ = 5.0  # depth frames beyond this rate are dropped, newest wins
 
 
@@ -82,6 +84,10 @@ class NavigationService:
         self.last_error: str | None = None
         self._occupied_voxels = 0
         self.integrate_ms: float | None = None
+        # Scoring aid, simulation only: the same depth frames integrated with the
+        # simulator's ground-truth pose. Never used for route checks or holds.
+        self.reference: OccupancyGrid | None = None
+        self._pose_errors: list[tuple[float, float, float]] = []  # heading, horizontal, vertical
 
     # ------------------------------------------------------------------ lifecycle
 
@@ -122,6 +128,11 @@ class NavigationService:
                     continue
                 started = time.monotonic()
                 await asyncio.to_thread(self.live.integrate, frame, pose)
+                if frame.truth_pose is not None:
+                    if self.reference is None:
+                        self.reference = OccupancyGrid(self.live.spec)
+                    await asyncio.to_thread(self.reference.integrate, frame, frame.truth_pose)
+                    self._note_pose_error(pose, frame.truth_pose)
                 self._occupied_voxels = int(np.count_nonzero(self.live.occupied_mask))
                 self._last_frame = frame
                 self._last_frame_at = time.monotonic()
@@ -137,6 +148,34 @@ class NavigationService:
                 self.last_error = repr(exc)
                 log.exception("Depth frame could not be integrated")
                 await asyncio.sleep(0.5)
+
+    def _note_pose_error(self, estimate: Pose, truth: Pose) -> None:
+        heading = (
+            frames.quaternion_to_euler_deg(*estimate.quaternion_wxyz)[2]
+            - frames.quaternion_to_euler_deg(*truth.quaternion_wxyz)[2]
+            + 180.0
+        ) % 360.0 - 180.0
+        de, dn, du = (
+            a - b for a, b in zip(estimate.position_enu_m, truth.position_enu_m, strict=True)
+        )
+        self._pose_errors.append((heading, math.hypot(de, dn), du))
+        del self._pose_errors[:-MAX_POSE_ERROR_SAMPLES]
+
+    def pose_error(self) -> dict[str, Any] | None:
+        """Estimated pose (autopilot) minus simulator ground truth, over the recent frames."""
+        if not self._pose_errors:
+            return None
+        errors = np.array(self._pose_errors)
+        return {
+            "samples": len(errors),
+            "heading_error_deg_mean": round(float(errors[:, 0].mean()), 2),
+            "heading_error_deg_max_abs": round(float(np.abs(errors[:, 0]).max()), 2),
+            "horizontal_error_m_mean": round(float(errors[:, 1].mean()), 2),
+            "horizontal_error_m_max": round(float(errors[:, 1].max()), 2),
+            "vertical_error_m_mean": round(float(errors[:, 2].mean()), 2),
+            "note": "autopilot estimate minus simulator ground truth; positive heading "
+            "error is clockwise. Includes the telemetry-to-frame pairing delay.",
+        }
 
     def depth_age_s(self) -> float | None:
         return time.monotonic() - self._last_frame_at if self._last_frame_at else None
@@ -304,6 +343,13 @@ class NavigationService:
         report["scenario"] = self.scenario_id
         report["frames_integrated"] = self.live.frames_integrated
         report["ground_truth"] = "scenario geometry (obstacles and staged props)"
+        report["pose_source"] = "autopilot estimate (what a real aircraft would have)"
+        if self.reference is not None:
+            reference = self.reference.compare_with(self.truth)
+            reference["pose_source"] = "simulator ground truth (scoring only, simulation only)"
+            reference["frames_integrated"] = self.reference.frames_integrated
+            report["with_simulator_truth_pose"] = reference
+            report["pose_error"] = self.pose_error()
         return report
 
     def map_payload(self, since_revision: int = -1) -> dict[str, Any]:
@@ -345,4 +391,5 @@ class NavigationService:
             "auto_hold": self.auto_hold,
             "nearest_obstacle_m": self.nearest_obstacle_m,
             "last_error": self.last_error,
+            "pose_error": self.pose_error(),
         }

@@ -42,6 +42,9 @@ class DepthFrame:
     source: str
     captured_at_unix_s: float
     pose: Pose | None = None  # vehicle pose at capture, when the source knows it
+    # The simulator's own (ground-truth) vehicle pose at capture. Used ONLY to score
+    # the map and to measure the pose-estimate error; never for mapping decisions.
+    truth_pose: Pose | None = None
 
     @property
     def width(self) -> int:
