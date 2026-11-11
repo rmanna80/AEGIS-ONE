@@ -64,6 +64,20 @@ export function MissionPanel() {
   const attested = system?.simulator_attested !== false;
   const canCommand = commandsEnabled && attested && vehicleConnected && token.length > 0;
   const valid = issues !== null && issues.length === 0;
+  // A disabled button must always say why; otherwise a click looks like "nothing happens".
+  const startBlockedBy = !commandsEnabled
+    ? null // explained by the read-only note below
+    : !vehicleConnected
+      ? "No vehicle connected. Start PX4 (scripts/run_px4.sh) and wait for the Vehicle lamp to turn green."
+      : !attested
+        ? null // explained by the "Commands locked" note below
+        : token.length === 0
+          ? "Enter the operator token above (the AEGIS_OPERATOR_TOKEN value from your .env file)."
+          : busy
+            ? "A mission is in progress. Use Hold, Return or Land to intervene."
+            : !valid
+              ? "The mission has validation problems (see above)."
+              : null;
 
   const saveToken = (value: string) => {
     setToken(value);
@@ -258,6 +272,12 @@ export function MissionPanel() {
           >
             Upload &amp; start mission
           </button>
+        )}
+
+        {startBlockedBy && !confirming && (
+          <p className="mb-2 rounded-sm border border-warn/50 px-2 py-1 text-[11px] text-warn" role="status">
+            {startBlockedBy}
+          </p>
         )}
 
         <div className="grid grid-cols-3 gap-1.5">
