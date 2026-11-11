@@ -162,3 +162,63 @@ export interface SystemInfo {
   attestation_error?: string | null;
   replay?: { file: string; duration_s: number; recorded_source: string };
 }
+
+// --- Perception (mirrors backend/aegis/perception/types.py). Image coordinates:
+// pixels, origin top-left. Motion is image-space only.
+
+export type BBox = [number, number, number, number];
+
+export interface Detection {
+  label: string;
+  class_id: number;
+  confidence: number;
+  bbox_xyxy_px: BBox;
+}
+
+export interface Track {
+  track_id: number;
+  label: string;
+  class_id: number;
+  state: "tentative" | "confirmed" | "coasting";
+  bbox_xyxy_px: BBox;
+  confidence: number;
+  velocity_px_s: [number, number];
+  age_frames: number;
+  frames_since_update: number;
+  history_px: [number, number][];
+}
+
+export interface PerceptionResult {
+  frame_id: number;
+  sensor_id: string;
+  provenance: Provenance;
+  source: string;
+  captured_at_unix_s: number;
+  source_time_s: number | null;
+  width_px: number;
+  height_px: number;
+  detector: string;
+  inference_latency_ms: number;
+  detections: Detection[];
+  tracks: Track[];
+  selected_track_id: number | null;
+}
+
+export type PerceptionStatus =
+  | { enabled: false; reason: string }
+  | {
+      enabled: true;
+      detector: string;
+      camera_source: string | null;
+      provenance: Provenance | null;
+      frames_processed: number;
+      fps: number | null;
+      inference_latency_ms_p50: number | null;
+      inference_latency_ms_p95: number | null;
+      last_frame_age_s: number | null;
+      tracks: number;
+      selected_track_id: number | null;
+      faults: string[];
+      last_error: string | null;
+      recording: string | null;
+    };

@@ -37,7 +37,8 @@ make -C "$PX4_DIR" px4_sitl_default
 cd "$REPO_ROOT"
 python3 -m venv .venv
 .venv/bin/pip install --upgrade pip
-.venv/bin/pip install -e '.[dev]'
+.venv/bin/pip install -e '.[dev,perception]'
+bash scripts/get_detector_model.sh || echo 'Model download failed; perception stays off until it succeeds.' >&2
 
 # The dashboard needs Node.js 20+; Ubuntu 24.04's own package is too old.
 node_major="$(node --version 2>/dev/null | sed -E 's/^v([0-9]+).*/\1/' || true)"

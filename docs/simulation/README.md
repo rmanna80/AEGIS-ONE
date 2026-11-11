@@ -30,7 +30,7 @@ airframe id it reads for attestation.
 | Wind | Not available in PX4 v1.17 SIH | Gazebo wind plugin (Phase 3) |
 | Needs a GPU / GUI | No | Recommended |
 | Airframe id (`SYS_AUTOSTART`) | 10040 | 4001 |
-| Status in this project | **Built and flown** | **World generated, never launched** |
+| Status in this project | **Built and flown** | Launch confirmed by the project owner on WSL2 |
 
 ### Why SIH first
 

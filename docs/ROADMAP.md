@@ -5,8 +5,8 @@
 | Phase | Scope | Status |
 | --- | --- | --- |
 | 0 | Architecture and setup | Done |
-| 1 | Working 3D simulation, telemetry, waypoint mission, dashboard | Done with PX4 SIH; Gazebo launch unverified |
-| 2 | Perception: simulated RGB camera, detection, tracking, recording | Next |
+| 1 | Working 3D simulation, telemetry, waypoint mission, dashboard | Done (SIH verified; Gazebo launch confirmed by the owner) |
+| 2 | Perception: simulated RGB camera, detection, tracking, recording | In progress: detection, tracking, video panel and recording done; Gazebo camera link unverified; playback missing |
 | 3 | Navigation and mapping: depth, occupancy, planning, wind | Not started |
 | 4 | Thermal and search and rescue | Not started |
 | 5 | Multi-drone simulation | Not started |
@@ -14,21 +14,27 @@
 | 7 | Raspberry Pi integration | Not started |
 | 8 | Physical hardware readiness (documentation and gating only) | Not started |
 
-## Next milestone: finish Phase 1 on Gazebo, then start Phase 2
+## Next milestone: finish Phase 2
 
-1. On the WSL2 machine: run `scripts/setup_wsl.sh`, launch `run_px4.sh gazebo`, and pass Demo 1
-   and the simulation tests against the x500 in the generated world. Fix whatever the first
-   Gazebo launch turns up.
-2. Add ROS 2 Jazzy and `ros_gz_bridge`; define the `CameraSource` protocol with a
-   `GazeboCameraAdapter` and a `VideoFileCameraAdapter`.
-3. Detection behind an `InferenceBackend` protocol (ONNX Runtime on CPU first, so no GPU is
-   required), with detections stored and replayed alongside telemetry.
-4. Kalman + association tracker with ID-switch metrics.
-5. Dashboard video panel with boxes and track IDs.
+1. Run the Gazebo camera path (`run_px4.sh gazebo-cam` + `gz_camera_bridge.py`) and fix
+   whatever its first launch turns up.
+2. Environment B (urban) with human-shaped and vehicle models, so there is something to detect
+   in simulation; then Demo 2 with acceptance criteria.
+3. Synchronized playback of recorded detections with telemetry (store video alongside the
+   detection log).
+4. Precision / recall on a meaningful labelled set, and on Gazebo-rendered imagery.
+5. Decide whether ROS 2 is needed before Phase 3. The camera link currently uses Gazebo's own
+   transport, which avoided a ROS 2 install; mapping libraries in Phase 3 will likely need it.
 
 ## Known defects and limitations
 
-- Gazebo path never launched (see docs/simulation).
+- Tracker has no appearance model: an occlusion longer than the coast limit produces a new ID,
+  and double detections can create a duplicate track.
+- Coast limit is counted in processed frames, so its duration depends on inference speed.
+- Detection model licence is AGPL-3.0 (Ultralytics). Fine for private research; check it before
+  distributing a product. The backend interface accepts any compatible ONNX model.
+- No user-defined object classes yet (needs a fine-tuned model).
+- Camera frames claiming `physical` provenance are refused until Phase 7.
 - Replay has no pause or seek; speed and file are fixed at backend start.
 - Simulator start / pause / reset and fault injection are not available from the dashboard.
 - Camera modes for thermal and depth do not exist yet (no such sensors until Phases 3 to 4).

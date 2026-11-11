@@ -36,6 +36,15 @@ class Settings(BaseSettings):
     scenario_file: Path = REPO_ROOT / "simulation" / "scenarios" / "open_field.json"
     frontend_dist: Path = REPO_ROOT / "frontend" / "dist"
 
+    # Perception (optional). camera: "none", "stream" (TCP frame stream, e.g. the
+    # Gazebo camera bridge) or "video:<path to a video file>".
+    camera: str = "none"
+    camera_stream_host: str = "127.0.0.1"
+    camera_stream_port: int = 5600
+    detector_model: Path = REPO_ROOT / "models" / "yolo11n.onnx"
+    detector_confidence: float = 0.35
+    detector_labels: list[str] = []  # empty = every class the model knows
+
     broadcast_hz: float = 10.0
     cors_origins: list[str] = ["http://localhost:5173", "http://127.0.0.1:5173"]
 

@@ -7,12 +7,15 @@ import { MissionPanel } from "./components/MissionPanel";
 import { Overview } from "./components/Overview";
 import { useStore } from "./state/store";
 import { useTelemetry } from "./telemetry/useTelemetry";
+import { VideoPanel } from "./components/VideoPanel";
 import { Scene } from "./visualization/Scene";
 
 export default function App() {
   useTelemetry();
   const setSystem = useStore((s) => s.setSystem);
   const setScenario = useStore((s) => s.setScenario);
+  const setPerception = useStore((s) => s.setPerception);
+  const perceptionEnabled = useStore((s) => Boolean(s.perception?.enabled));
 
   useEffect(() => {
     let cancelled = false;
@@ -27,22 +30,39 @@ export default function App() {
         .system()
         .then((system) => !cancelled && setSystem(system))
         .catch(() => undefined);
+    const loadPerception = () =>
+      api
+        .perception()
+        .then((status) => !cancelled && setPerception(status))
+        .catch(() => undefined);
     loadScenario();
     loadSystem();
-    const timer = window.setInterval(loadSystem, 2000);
+    loadPerception();
+    const timer = window.setInterval(() => {
+      loadSystem();
+      loadPerception();
+    }, 2000);
     return () => {
       cancelled = true;
       window.clearInterval(timer);
     };
-  }, [setScenario, setSystem]);
+  }, [setScenario, setSystem, setPerception]);
 
   return (
     <div className="flex h-full min-w-[1100px] flex-col">
       <Header />
       <div className="flex min-h-0 flex-1">
         <main className="flex min-w-0 flex-1 flex-col">
-          <div className="min-h-0 flex-1">
-            <Scene />
+          {/* Split screen: 3D environment on the left, camera + AI output on the right. */}
+          <div className="flex min-h-0 flex-1">
+            <div className="min-w-0 flex-1">
+              <Scene />
+            </div>
+            {perceptionEnabled && (
+              <div className="w-[42%] min-w-[360px] border-l border-line">
+                <VideoPanel />
+              </div>
+            )}
           </div>
           <div className="h-44 shrink-0 border-t border-line bg-ink-900">
             <Charts />

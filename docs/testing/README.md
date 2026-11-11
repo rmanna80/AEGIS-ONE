@@ -8,7 +8,7 @@ are a record of what was observed, not a guarantee.
 
 | Suite | Command | Result |
 | --- | --- | --- |
-| Backend unit + API | `pytest` | 69 passed, 2 skipped (the SITL tests) in 0.6 s |
+| Backend unit + API + perception | `pytest` | 99 passed, 3 skipped (2 SITL tests, 1 needing the COCO8 images) |
 | Lint | `ruff check . && ruff format --check .` | clean |
 | Types | `mypy` (strict) | no issues in 12 source files |
 | Frontend unit | `cd frontend && npm test` | 9 passed |
@@ -58,10 +58,44 @@ These should become automated tests (see ROADMAP).
   physical mode.
 - **Frontend**: scene axis mapping and the attitude-quaternion change of basis.
 
+## Perception results (Phase 2, measured 2026-11-10)
+
+Machine: the bootstrap VM, 2 logical CPUs, no GPU, ONNX Runtime CPU provider. Your Ryzen
+desktop should be considerably faster; these are not targets.
+
+**Detector** (`python scripts/eval_detector.py`, YOLO11n ONNX, confidence 0.35, IoU 0.5):
+
+| Metric | Value |
+| --- | --- |
+| Dataset | COCO8: 8 images, 30 labelled objects. A smoke test, **not** a benchmark. |
+| True / false positives / false negatives | 16 / 2 / 14 |
+| Precision / recall | 0.889 / 0.533 |
+| Inference latency, median / p95 | 87 ms / 104 ms (about 11.5 fps) |
+
+The low recall is mostly small or crowded objects at this threshold; with 30 objects the
+figure moves several points per object, so do not read much into it.
+
+**Tracker on synthetic ground truth** (`backend/tests/test_tracker.py`): three objects, 300
+frames, 5 random seeds, 20% missed detections and 3 px jitter: 0 identity switches, lost-track
+rate under 2%. A 15-frame full occlusion keeps the same ID.
+
+**End-to-end with the real model**: a 16 s clip built from real photos moving across a frame,
+one passing behind a pillar, streamed through `scripts/stream_video.py` into the live backend
+and dashboard. Pipeline ran at about 12 fps (60 of 240 frames dropped because inference is
+slower than the 15 fps clip). One object kept a single ID for the whole clip. The object that
+passed behind the pillar **did get a new ID**: it was hidden for roughly 3 s, longer than the
+30-frame coast limit. There was also one duplicate track from a double detection. Short
+occlusions hold; long ones need appearance-based re-identification, which is not implemented.
+
+Stopping the video sender raised a `camera.no_frames` warning within a few seconds.
+
 ## Not tested yet
 
-- Anything under Gazebo (not installed on the bootstrap machine).
-- ROS 2, cameras, and every Phase 2+ capability.
+- Anything under Gazebo by me (not installable on the bootstrap machine). The project owner
+  reports the Gazebo launch works on WSL2.
+- `scripts/gz_camera_bridge.py` and the `gazebo-cam` launch: never run.
+- Detection on Gazebo-rendered imagery (rendered people and vehicles may detect poorly).
+- ROS 2, and every Phase 3+ capability.
 - PX4 geofence breach behaviour, wind, in-simulator sensor faults.
 - Browser end-to-end tests (Playwright) and React component tests. The dashboard was driven
   by a script in headless Chrome once; that script is not in the repository yet.

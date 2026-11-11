@@ -5,10 +5,12 @@ telemetry/mission backend, and a 3D mission-control dashboard. Intended for auth
 non-weapon robotics research, environmental inspection and search and rescue, always with a
 human operator in control.
 
-**Status: Phase 0 and Phase 1 complete.** A simulated PX4 quadcopter flies a geofenced waypoint
-mission commanded from the dashboard, with live telemetry, alerts, flight recording and replay.
-Perception, mapping, thermal, multi-drone, anomaly detection and security monitoring are later
-phases and are **not** implemented yet (see [docs/ROADMAP.md](docs/ROADMAP.md)).
+**Status: Phases 0 and 1 complete; Phase 2 (perception) in progress.** A simulated PX4
+quadcopter flies a geofenced waypoint mission commanded from the dashboard, with live telemetry,
+alerts, flight recording and replay. Object detection and tracking run on video files and
+network camera streams; the Gazebo camera link is written but not yet run. Mapping, thermal,
+multi-drone, anomaly detection and security monitoring are later phases and are **not**
+implemented yet (see [docs/ROADMAP.md](docs/ROADMAP.md)).
 
 No drone hardware is needed. No physical-flight code path exists in this release.
 
@@ -27,8 +29,14 @@ No drone hardware is needed. No physical-flight code path exists in this release
 | Advisory alerts: link loss, stale data, battery, GNSS, estimator, geofence | Unit-tested with injected faults |
 | Flight recording (JSONL) and replay, re-labelled as `replayed` | Verified |
 | 3D dashboard: drone pose, trajectory, route, geofence, obstacles, 5 camera modes, charts | Verified in a browser |
-| Gazebo Harmonic world for Environment A (generated from the scenario file) | **Written, not yet run** |
-| ROS 2 Jazzy bridge, cameras, LiDAR, thermal | Not started (Phase 2+) |
+| Gazebo Harmonic world for Environment A (generated from the scenario file) | Launch confirmed by the project owner on WSL2; not independently re-verified |
+| Object detection (YOLO11n via ONNX Runtime, CPU), swappable backend | Verified on real photos; precision/recall measured on a tiny sample set |
+| Multi-object tracking (Kalman + Hungarian), IDs, histories, short-occlusion coasting | Verified on synthetic ground truth and a real-model video run |
+| Camera sources: video file, TCP frame stream | Verified |
+| Dashboard video panel: boxes, track IDs, trails, click-to-highlight, latency | Verified in a browser |
+| Detection recording (JSONL) | Verified; playback of recorded detections not built yet |
+| Gazebo camera to AEGIS bridge (`scripts/gz_camera_bridge.py`) | **Written, not yet run** |
+| ROS 2 Jazzy bridge, LiDAR, thermal | Not started |
 
 "Verified" means it was executed and observed; the commands and results are in
 [docs/testing/README.md](docs/testing/README.md).
@@ -72,6 +80,33 @@ AEGIS_MODE=replay bash scripts/run_backend.sh
 
 Frontend development with hot reload: `cd frontend && npm run dev` (http://localhost:5173,
 proxies to the backend).
+
+## Camera and object detection (optional)
+
+Perception is off unless a camera is configured, and the rest of the platform runs without it.
+
+```bash
+bash scripts/get_detector_model.sh        # downloads YOLO11n ONNX (AGPL-3.0, not committed)
+```
+
+Try it on any video file (no Gazebo needed):
+
+```bash
+AEGIS_CAMERA=video:/path/to/clip.mp4 bash scripts/run_backend.sh
+```
+
+With the simulated drone's camera in Gazebo (three terminals; **this path is untested**):
+
+```bash
+bash scripts/run_px4.sh gazebo-cam                  # x500 with a forward RGB camera
+AEGIS_CAMERA=stream bash scripts/run_backend.sh
+/usr/bin/python3 scripts/gz_camera_bridge.py        # system Python, not the .venv
+```
+
+The dashboard then shows a split screen: 3D view on the left, camera with boxes and track IDs
+on the right. Clicking an object highlights its track; it never changes what the drone does.
+Dashed boxes marked "predicted" are tracks coasting through a missed detection or occlusion.
+Measure the detector on your machine with `python scripts/eval_detector.py`.
 
 ## Demo 1: Autonomous survey
 
@@ -120,6 +155,7 @@ backend/aegis/          Python package
   recording.py          flight recorder and replay adapter
   hub.py                sample -> monitor -> record -> broadcast loop
   api.py                FastAPI REST + WebSocket
+  perception/           optional: cameras, ONNX detector, tracker, metrics, pipeline
 backend/tests/          unit and API tests
 tests/simulation/       tests that need a live PX4 SITL
 frontend/               React + TypeScript + React Three Fiber dashboard

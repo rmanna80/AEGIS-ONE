@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { Mission, Scenario, Snapshot, SystemInfo } from "../types";
+import type { Mission, PerceptionStatus, Scenario, Snapshot, SystemInfo } from "../types";
 
 export type LinkStatus = "connecting" | "open" | "closed";
 export type CameraMode = "follow" | "orbit" | "fpv" | "top" | "free";
@@ -22,6 +22,7 @@ interface Store {
   snapshot: Snapshot | null;
   system: SystemInfo | null;
   scenario: Scenario | null;
+  perception: PerceptionStatus | null;
   /** Mission being edited/previewed in the planner (starts as the scenario demo). */
   draft: Mission | null;
   history: HistoryPoint[];
@@ -36,6 +37,7 @@ interface Store {
   ingest: (snapshot: Snapshot) => void;
   setSystem: (system: SystemInfo) => void;
   setScenario: (scenario: Scenario) => void;
+  setPerception: (perception: PerceptionStatus) => void;
   setDraft: (draft: Mission) => void;
   setCameraMode: (mode: CameraMode) => void;
   clearTrack: () => void;
@@ -46,6 +48,7 @@ export const useStore = create<Store>((set, get) => ({
   snapshot: null,
   system: null,
   scenario: null,
+  perception: null,
   draft: null,
   history: [],
   track: [],
@@ -56,6 +59,7 @@ export const useStore = create<Store>((set, get) => ({
 
   setLink: (link) => set({ link }),
   setSystem: (system) => set({ system }),
+  setPerception: (perception) => set({ perception }),
   setScenario: (scenario) =>
     set((s) => ({ scenario, draft: s.draft ?? structuredClone(scenario.demo_mission) })),
   setDraft: (draft) => set({ draft }),

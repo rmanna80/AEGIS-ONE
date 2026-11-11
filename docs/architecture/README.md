@@ -46,6 +46,27 @@ Gazebo camera adapter or a Raspberry Pi camera adapter is a new class that satis
 plus configuration. Camera, thermal and depth protocols will be added with their first real
 implementation in Phase 2 to 4 rather than declared now with nothing behind them.
 
+## Perception (optional subsystem)
+
+```text
+CameraSource --> InferenceBackend --> MultiObjectTracker --> PerceptionResult
+ video file        ONNX YOLO (CPU)      Kalman + Hungarian     -> /ws/video (JSON + JPEG)
+ TCP stream        (swappable)          image-space only       -> detections JSONL
+                                                                -> hub alerts (camera, latency)
+```
+
+- `CameraSource` and `InferenceBackend` are protocols in `perception/types.py`. The tracker,
+  pipeline and UI never import ONNX Runtime, so the detector can change (another model, the
+  IMX500 on-camera path later) without touching them.
+- The backend imports perception lazily. Without the `perception` extra, a model file or a
+  configured camera, everything else runs and the dashboard says why the camera is off.
+- Gazebo images reach AEGIS through `scripts/gz_camera_bridge.py`, a separate process using
+  Gazebo's own Python bindings and a small TCP frame protocol. Gazebo's protobuf build and the
+  backend's gRPC stack have conflicting dependencies, and the same protocol will carry
+  Raspberry Pi camera frames in Phase 7.
+- Tracking output is image-space only (pixels, pixels per second). Selecting a track highlights
+  it for the operator; no code path connects perception to vehicle commands.
+
 ## Data contracts
 
 `aegis/contracts.py` defines the Pydantic models that cross every boundary. Conventions:

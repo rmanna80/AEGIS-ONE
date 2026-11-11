@@ -7,13 +7,14 @@ import asyncio
 import contextlib
 import logging
 import time
+from collections.abc import Callable
 from typing import Any
 
 from aegis.contracts import Alert, VehicleState
 from aegis.interfaces import MissionExecutor, VehicleTelemetrySource
 from aegis.missions import Geofence, MissionPhase, MissionStatus
 from aegis.recording import FlightRecorder
-from aegis.safety import AlertTracker, SafetyLimits, evaluate
+from aegis.safety import AlertTracker, Finding, SafetyLimits, evaluate
 
 log = logging.getLogger(__name__)
 
@@ -36,6 +37,8 @@ class TelemetryHub:
         self.period_s = 1.0 / rate_hz
         self.alerts = AlertTracker()
         self.geofence: Geofence | None = None  # fence of the mission being flown
+        # Additional advisory checks contributed by optional subsystems (perception...).
+        self.extra_checks: list[Callable[[], list[Finding]]] = []
 
         self.state: VehicleState | None = None
         self.mission = MissionStatus()
@@ -114,9 +117,10 @@ class TelemetryHub:
             self.mission = self.source.replayed_mission_status()
         fence = self.geofence if self.mission.phase in _ACTIVE_PHASES else None
 
-        changed: list[Alert] = self.alerts.update(
-            state, evaluate(state, now, self.limits, fence), now
-        )
+        findings = evaluate(state, now, self.limits, fence)
+        for check in self.extra_checks:
+            findings.extend(check())
+        changed: list[Alert] = self.alerts.update(state, findings, now)
         for alert in changed:
             log.warning(
                 "ALERT %s [%s/%s] %s%s",

@@ -20,6 +20,12 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+perception = [
+    "numpy>=2.0",
+    "opencv-python-headless>=4.10",
+    "onnxruntime>=1.20",
+    "scipy>=1.13",
+]
 dev = [
     "pytest>=8",
     "pytest-asyncio>=0.23",
@@ -59,5 +65,5 @@ strict = true
 files = ["backend/aegis"]
 
 [[tool.mypy.overrides]]
-module = ["mavsdk_grpc.*"]
+module = ["mavsdk_grpc.*", "onnxruntime.*", "scipy.*", "cv2.*"]
 ignore_missing_imports = true

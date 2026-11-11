@@ -16,22 +16,64 @@ import time
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Annotated, Any
+from typing import TYPE_CHECKING, Annotated, Any
 
 from fastapi import Depends, FastAPI, Header, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel
 
 from aegis import __version__
 from aegis.adapters.px4_sitl import NotAttestedError, PX4SITLAdapter
 from aegis.config import OperatingMode, Settings
-from aegis.contracts import Alert
+from aegis.contracts import Alert, Severity
 from aegis.hub import TelemetryHub
 from aegis.interfaces import MissionExecutor, VehicleTelemetrySource
 from aegis.missions import Mission, MissionResult, MissionStatus, validate_mission
 from aegis.recording import FlightRecorder, RecordedTelemetryAdapter
 
+if TYPE_CHECKING:
+    from aegis.perception.pipeline import PerceptionPipeline
+
 log = logging.getLogger("aegis.api")
+
+
+class TrackSelection(BaseModel):
+    track_id: int | None
+
+
+def build_perception(settings: Settings) -> tuple[PerceptionPipeline | None, str]:
+    """Create the perception pipeline, or explain why it is off. Never raises:
+    the simulator and dashboard must keep working without the AI stack."""
+    if settings.camera == "none":
+        return None, "No camera configured (set AEGIS_CAMERA)."
+    try:
+        from aegis.perception.cameras import StreamCameraAdapter, VideoFileCameraAdapter
+        from aegis.perception.pipeline import PerceptionPipeline
+        from aegis.perception.types import CameraSource
+        from aegis.perception.yolo_onnx import OnnxYoloBackend
+    except ImportError as exc:
+        return None, f"Perception dependencies are not installed ({exc.name}); see README."
+    try:
+        camera: CameraSource
+        if settings.camera == "stream":
+            camera = StreamCameraAdapter(settings.camera_stream_host, settings.camera_stream_port)
+        elif settings.camera.startswith("video:"):
+            camera = VideoFileCameraAdapter(Path(settings.camera.removeprefix("video:")))
+        else:
+            return None, f"Unknown AEGIS_CAMERA value {settings.camera!r}."
+        detector = OnnxYoloBackend(
+            settings.detector_model,
+            confidence_threshold=settings.detector_confidence,
+            allowed_labels=settings.detector_labels or None,
+        )
+    except (OSError, ValueError, RuntimeError) as exc:
+        return None, str(exc)
+    record = None
+    if settings.record_flights:
+        stamp = time.strftime("%Y%m%dT%H%M%S")
+        record = settings.data_dir / "detections" / f"detections_{stamp}.jsonl"
+    return PerceptionPipeline(camera, detector, record_path=record), ""
 
 
 def build_hub(settings: Settings) -> TelemetryHub:
@@ -57,7 +99,11 @@ def build_hub(settings: Settings) -> TelemetryHub:
     return TelemetryHub(source, executor, recorder, rate_hz=settings.broadcast_hz)
 
 
-def create_app(settings: Settings | None = None, hub: TelemetryHub | None = None) -> FastAPI:
+def create_app(
+    settings: Settings | None = None,
+    hub: TelemetryHub | None = None,
+    perception: PerceptionPipeline | None = None,
+) -> FastAPI:
     settings = settings or Settings()
     logging.basicConfig(
         level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s"
@@ -65,6 +111,22 @@ def create_app(settings: Settings | None = None, hub: TelemetryHub | None = None
     hub = hub or build_hub(settings)
     token = settings.operator_token or secrets.token_urlsafe(24)
     scenario = _load_scenario(settings.scenario_file)
+    perception_off_reason = ""
+    if perception is None:
+        perception, perception_off_reason = build_perception(settings)
+    if perception is not None:
+        pipeline = perception
+
+        def perception_findings() -> list[tuple[str, Severity, str]]:
+            messages = {
+                "camera.no_frames": "No camera frames are arriving.",
+                "inference.slow": "Object-detection latency is above 500 ms (p95).",
+            }
+            return [
+                (code, Severity.WARNING, messages[code]) for code in pipeline.status()["faults"]
+            ]
+
+        hub.extra_checks.append(perception_findings)
 
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
@@ -72,9 +134,20 @@ def create_app(settings: Settings | None = None, hub: TelemetryHub | None = None
         if hub.executor is not None and settings.operator_token is None:
             log.warning("AEGIS_OPERATOR_TOKEN not set; generated for this run: %s", token)
         await hub.start()
+        if perception is not None:
+            log.info(
+                "Perception enabled: camera=%s detector=%s",
+                settings.camera,
+                perception.detector.name,
+            )
+            await perception.start()
+        else:
+            log.info("Perception disabled: %s", perception_off_reason)
         try:
             yield
         finally:
+            if perception is not None:
+                await perception.stop()
             await hub.stop()
 
     app = FastAPI(title="AEGIS ONE", version=__version__, lifespan=lifespan)
@@ -215,6 +288,41 @@ def create_app(settings: Settings | None = None, hub: TelemetryHub | None = None
             pass
         finally:
             hub.unsubscribe(queue)
+
+    # ---------------------------------------------------------------- perception
+
+    @app.get("/api/perception")
+    async def perception_status() -> dict[str, Any]:
+        if perception is None:
+            return {"enabled": False, "reason": perception_off_reason}
+        return perception.status()
+
+    @app.post("/api/perception/select")
+    async def select_track(selection: TrackSelection) -> dict[str, Any]:
+        """Highlight a track for the operator. Display only: it commands nothing."""
+        if perception is None:
+            raise HTTPException(409, "Perception is not enabled.")
+        if not perception.select_track(selection.track_id):
+            raise HTTPException(404, f"No active track {selection.track_id}.")
+        return {"selected_track_id": perception.selected_track_id}
+
+    @app.websocket("/ws/video")
+    async def video(ws: WebSocket) -> None:
+        """Per frame: one JSON text message (PerceptionResult) then one binary JPEG."""
+        await ws.accept()
+        if perception is None:
+            await ws.close(code=1008, reason="perception disabled")
+            return
+        queue = perception.subscribe()
+        try:
+            while True:
+                result, jpeg = await queue.get()
+                await ws.send_json(result)
+                await ws.send_bytes(jpeg)
+        except (WebSocketDisconnect, asyncio.CancelledError, RuntimeError):
+            pass
+        finally:
+            perception.unsubscribe(queue)
 
     if settings.frontend_dist.is_dir():
         app.mount("/", StaticFiles(directory=settings.frontend_dist, html=True), name="ui")

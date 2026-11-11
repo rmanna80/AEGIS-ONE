@@ -1,4 +1,4 @@
-import type { Mission, MissionStatus, Scenario, SystemInfo } from "./types";
+import type { Mission, MissionStatus, PerceptionStatus, Scenario, SystemInfo } from "./types";
 
 export class ApiError extends Error {
   constructor(
@@ -42,6 +42,9 @@ export const api = {
     post<{ valid: boolean; issues: string[] }>("/api/missions/validate", mission),
   submit: (mission: Mission, token: string) =>
     post<{ accepted: boolean; status: MissionStatus }>("/api/missions", mission, token),
+  perception: () => request<PerceptionStatus>("/api/perception"),
+  selectTrack: (trackId: number | null) =>
+    post<{ selected_track_id: number | null }>("/api/perception/select", { track_id: trackId }),
   hold: (token: string) => post<unknown>("/api/vehicle/hold", undefined, token),
   returnHome: (token: string) => post<unknown>("/api/vehicle/return", undefined, token),
   land: (token: string) => post<unknown>("/api/vehicle/land", undefined, token),

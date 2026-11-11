@@ -20,6 +20,7 @@ export function Scene() {
   const setMode = useStore((s) => s.setCameraMode);
   const clearTrack = useStore((s) => s.clearTrack);
   const hasPose = useStore((s) => Boolean(s.snapshot?.state?.position_enu_m));
+  const perception = useStore((s) => s.perception);
   const vehicleRef = useRef<THREE.Group | null>(null);
 
   return (
@@ -77,6 +78,15 @@ export function Scene() {
           Vehicle drawn at {MODEL_SCALE}x scale · 10 m grid · ENU frame
         </span>
       </div>
+
+      {perception && !perception.enabled && (
+        <div
+          className="absolute right-3 top-3 max-w-[340px] rounded-sm border border-line bg-ink-900/85 px-2.5 py-1.5 text-[10px] text-dim"
+          title="Perception is optional. See README: Camera and object detection."
+        >
+          <span className="panel-title">Camera / AI off</span> · {perception.reason}
+        </div>
+      )}
 
       {!hasPose && (
         <div className="absolute inset-0 flex items-center justify-center bg-ink-950/70">
