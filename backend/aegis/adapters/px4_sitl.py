@@ -100,7 +100,7 @@ class PX4SITLAdapter:
     def __init__(
         self,
         vehicle_id: str = "sim-1",
-        connection_url: str = "udpin://0.0.0.0:14540",
+        connection_url: str = "udpin://127.0.0.1:14540",
         grpc_port: int = 50051,
         sim_airframes: dict[int, tuple[str, Evidence]] | None = None,
     ) -> None:
@@ -131,6 +131,10 @@ class PX4SITLAdapter:
         # Fleet operation. frame_origin: express positions and missions in a frame shared
         # with other vehicles instead of this vehicle's own home. return_altitude_m: this
         # vehicle's Return altitude, so vehicles returning together are separated in height.
+        # Monotonic time of the last command AEGIS sent to this vehicle (mission start,
+        # Hold, Return, Land). Lets the anomaly monitor tell "we did that" from "something
+        # else did that".
+        self.last_command_at: float | None = None
         self.frame_origin: GeodeticPosition | None = None
         self.return_altitude_m: float | None = None
 
@@ -599,6 +603,7 @@ class PX4SITLAdapter:
                 return MissionResult(accepted=False, status=self._status)
 
             self._set_status(MissionPhase.UPLOADING, "Uploading geofence and mission.", **base)
+            self.last_command_at = time.monotonic()
             try:
                 await self._upload_and_start(mission, state.origin)
             except Exception as exc:
@@ -606,6 +611,7 @@ class PX4SITLAdapter:
                 return MissionResult(accepted=False, status=self._status)
 
             self._mission = mission
+            self.last_command_at = time.monotonic()  # arming follows the upload
             self._last_progress_at = self._mission_clock()
             self._set_status(MissionPhase.ACTIVE, "Mission started.")
             return MissionResult(accepted=True, status=self._status)
@@ -651,7 +657,16 @@ class PX4SITLAdapter:
                 )
             )
         await self._system.mission.set_return_to_launch_after_mission(c.return_to_home_on_complete)
+        # PX4 remembers how far it got through a mission. Uploading the same mission again
+        # after an interrupted flight would otherwise resume part-way through instead of
+        # starting at the first waypoint, so clear the old one and reset the index.
+        with contextlib.suppress(Exception):
+            await self._system.mission.clear_mission()
         await self._system.mission.upload_mission(MissionPlan(items))
+        try:
+            await self._system.mission.set_current_mission_item(0)
+        except Exception as exc:
+            log.warning("Could not reset the mission to its first waypoint: %s", exc)
 
         # Do not trust the command ACK: confirm PX4 really entered Mission mode.
         for attempt in range(1, MISSION_START_ATTEMPTS + 1):
@@ -748,6 +763,7 @@ class PX4SITLAdapter:
     ) -> None:
         self._require_attested()
         await self._await_heartbeat(timeout_s=10.0)
+        self.last_command_at = time.monotonic()
         await action()
         if self._status.phase in (
             MissionPhase.ACTIVE,
@@ -763,6 +779,14 @@ class PX4SITLAdapter:
             await self._intervene(self._system.action.hold, "Operator commanded hold.")
         else:
             await self._intervene(self._system.action.hold, reason, MissionPhase.BLOCKED)
+
+    async def simulate_external_hold(self) -> None:
+        """FAULT INJECTION, simulator only: put the vehicle in Hold the way a second
+        ground station would: not recorded as an AEGIS command and without touching
+        AEGIS's own mission status. Refused unless the vehicle is an attested simulator."""
+        self._require_attested()
+        await self._await_heartbeat(timeout_s=10.0)
+        await self._system.action.hold()
 
     async def return_to_home(self) -> None:
         await self._intervene(

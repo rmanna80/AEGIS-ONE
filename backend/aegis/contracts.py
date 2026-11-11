@@ -126,6 +126,10 @@ class VehicleState(_Model):
     gps: GpsQuality | None = None
     health: HealthFlags | None = None
 
+    # Names of faults deliberately injected into this snapshot for testing (simulation
+    # only). Non-empty means the values here are NOT what the simulator reported.
+    injected_faults: tuple[str, ...] = ()
+
     derived_fields: tuple[str, ...] = (
         "position_enu_m",
         "ground_speed_m_s",

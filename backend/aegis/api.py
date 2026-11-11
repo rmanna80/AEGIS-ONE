@@ -24,6 +24,7 @@ from fastapi import (
     FastAPI,
     Header,
     HTTPException,
+    Request,
     Response,
     WebSocket,
     WebSocketDisconnect,
@@ -34,8 +35,11 @@ from pydantic import BaseModel, Field
 
 from aegis import __version__
 from aegis.adapters.px4_sitl import NotAttestedError, PX4SITLAdapter
+from aegis.anomaly import AnomalyMonitor
 from aegis.config import OperatingMode, Settings
 from aegis.contracts import Alert, Severity
+from aegis.faults import KINDS as FAULT_KINDS
+from aegis.faults import FaultInjector, FaultRequest
 from aegis.fleet import Fleet, route_conflicts, route_legs
 from aegis.hub import TelemetryHub
 from aegis.interfaces import MissionExecutor, VehicleTelemetrySource
@@ -48,6 +52,7 @@ from aegis.missions import (
 )
 from aegis.recording import FlightRecorder, RecordedTelemetryAdapter
 from aegis.sar.review import ReviewRequest
+from aegis.security import AuditLog, SecurityMonitor, posture
 from aegis.watchdog import StallWatchdog, system_snapshot
 
 if TYPE_CHECKING:
@@ -269,11 +274,13 @@ def build_fleet(settings: Settings, primary: TelemetryHub, record_dir: Path | No
     """The first vehicle plus ``fleet_size - 1`` more PX4 instances (simulation only)."""
     hubs = [primary]
     live = settings.mode is not OperatingMode.REPLAY and isinstance(primary.source, PX4SITLAdapter)
+    base_url, _, port_text = settings.px4_url.rpartition(":")
+    base_port = int(port_text) if port_text.isdigit() else 14540
     for index in range(1, settings.fleet_size if live else 1):
         vehicle_id = f"sim-{index + 1}"
         px4 = PX4SITLAdapter(
             vehicle_id=vehicle_id,
-            connection_url=f"udpin://0.0.0.0:{14540 + index}",
+            connection_url=f"{base_url}:{base_port + index}",
             grpc_port=settings.mavsdk_grpc_port + index,
         )
         recorder = FlightRecorder(record_dir / f"flight_{vehicle_id}.jsonl") if record_dir else None
@@ -303,6 +310,16 @@ def create_app(
     if len(fleet.hubs) > 1:
         hub.extra_checks.append(fleet.findings)
         hub.snapshot_extras.append(fleet.snapshot_extra)
+    audit = AuditLog(record_dir / "audit.jsonl" if record_dir is not None else None)
+    security = SecurityMonitor(audit)
+    hub.extra_checks.append(security.findings)
+    anomaly = AnomalyMonitor(hub) if settings.anomaly else None
+    if anomaly is not None:
+        hub.extra_checks.append(anomaly.findings)
+    injector: FaultInjector | None = None
+    if settings.fault_injection and settings.mode is OperatingMode.SIMULATION:
+        injector = FaultInjector()
+        hub.state_filters.append(injector.apply)
     token = settings.operator_token or secrets.token_urlsafe(24)
     boot_id = secrets.token_hex(8)
     scenario = _load_scenario(settings.resolved_scenario_file())
@@ -409,6 +426,7 @@ def create_app(
     app = FastAPI(title="AEGIS ONE", version=__version__, lifespan=lifespan)
     app.state.sar = sar
     app.state.fleet = fleet
+    app.state.audit = audit
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origins,
@@ -417,14 +435,19 @@ def create_app(
     )
 
     def require_operator(
+        request: Request,
         x_aegis_operator_token: Annotated[str | None, Header()] = None,
     ) -> MissionExecutor:
-        """Commands need (a) simulation mode and (b) the operator token."""
+        """Commands need (a) simulation mode and (b) the operator token. Every attempt,
+        allowed or not, goes into the audit log (never the token itself)."""
         if hub.executor is None:
             raise HTTPException(403, f"Commands are disabled in {settings.mode.value} mode.")
+        client = request.client.host if request.client else None
         supplied = (x_aegis_operator_token or "").encode()
         if not hmac.compare_digest(supplied, token.encode()):
+            security.auth_failed(client, request.url.path)
             raise HTTPException(401, "Missing or invalid operator token.")
+        security.authorised(client, request.url.path)
         return hub.executor
 
     operator = Depends(require_operator)
@@ -575,6 +598,7 @@ def create_app(
 
     def rejected(mission: Mission, message: str, issues: list[str]) -> MissionResult:
         log.warning("Mission %s rejected: %s", mission.mission_id, issues)
+        security.outcome("mission", "rejected before upload", mission_id=mission.mission_id)
         return MissionResult(
             accepted=False,
             status=MissionStatus(
@@ -614,6 +638,12 @@ def create_app(
         if result.accepted:
             target.geofence = mission.constraints.geofence
             target.active_mission = mission
+        security.outcome(
+            "mission",
+            "accepted" if result.accepted else "rejected",
+            vehicle_id=vehicle_id,
+            mission_id=mission.mission_id,
+        )
         return result
 
     @app.post("/api/missions", response_model=MissionResult)
@@ -622,12 +652,16 @@ def create_app(
 
     async def _intervene(name: str, executor: MissionExecutor) -> dict[str, str]:
         log.info("Operator commanded %s", name)
+        vehicle_id = getattr(executor, "vehicle_id", None)
         try:
             await getattr(executor, name)()
         except NotAttestedError as exc:
+            security.outcome(name, "refused: simulator not attested", vehicle_id=vehicle_id)
             raise HTTPException(409, str(exc)) from exc
         except Exception as exc:
+            security.outcome(name, "refused by the autopilot", vehicle_id=vehicle_id)
             raise HTTPException(502, f"Autopilot refused {name}: {exc}") from exc
+        security.outcome(name, "sent", vehicle_id=vehicle_id)
         return {"status": "sent", "command": name}
 
     @app.post("/api/vehicle/hold")
@@ -641,6 +675,77 @@ def create_app(
     @app.post("/api/vehicle/land")
     async def land(executor: MissionExecutor = operator) -> dict[str, str]:
         return await _intervene("land", executor)
+
+    # ---------------------------------------------------- security and anomalies
+
+    @app.get("/api/security")
+    async def security_status() -> dict[str, Any]:
+        """Configuration posture, authentication failures, the audit log's state, the
+        anomaly detectors and any faults being injected."""
+        return {
+            "posture": posture(
+                operator_token=settings.operator_token,
+                token_generated=settings.operator_token is None,
+                px4_url=settings.px4_url,
+                cors_origins=settings.cors_origins,
+                fault_injection=injector is not None,
+                mode=settings.mode.value,
+            ),
+            "auth_failures_recent": security.recent_failures(),
+            "auth_failures_total": security.failures_total,
+            "command_requests_total": security.commands_total,
+            "audit": {
+                "records": audit.count,
+                "file": str(audit.path) if audit.path else None,
+                "recent": [
+                    {k: v for k, v in r.items() if k not in ("prev", "hash")}
+                    for r in list(audit.recent)[-15:]
+                ],
+            },
+            "anomaly": anomaly.status() if anomaly is not None else {"enabled": False},
+            "faults": {
+                "enabled": injector is not None,
+                "active": injector.active() if injector is not None else [],
+                "kinds": FAULT_KINDS,
+            },
+        }
+
+    def require_injector() -> FaultInjector:
+        if injector is None:
+            raise HTTPException(
+                409,
+                "Fault injection is off. Start the backend with AEGIS_FAULT_INJECTION=true "
+                "(simulation mode only).",
+            )
+        if not getattr(hub.source, "attested", False):
+            raise HTTPException(409, "Fault injection needs an attested simulator.")
+        return injector
+
+    @app.post("/api/faults")
+    async def inject_fault(
+        request: FaultRequest, executor: MissionExecutor = operator
+    ) -> dict[str, Any]:
+        """Inject a fault into AEGIS's copy of the telemetry (testing, simulation only)."""
+        faults = require_injector()
+        if request.kind == "external_hold":
+            simulate = getattr(executor, "simulate_external_hold", None)
+            if simulate is None:
+                raise HTTPException(409, "This vehicle adapter cannot simulate an outside command.")
+            await simulate()
+        else:
+            try:
+                faults.inject(request)
+            except ValueError as exc:
+                raise HTTPException(422, str(exc)) from exc
+        log.warning("FAULT INJECTED for testing: %s", request.kind)
+        security.outcome("fault_injection", request.kind)
+        return {"injected": request.kind, "active": faults.active()}
+
+    @app.delete("/api/faults")
+    async def clear_faults(_: MissionExecutor = operator) -> dict[str, Any]:
+        require_injector().clear()
+        security.outcome("fault_injection", "cleared")
+        return {"active": []}
 
     # ---------------------------------------------------------------------- fleet
 
@@ -779,6 +884,7 @@ def create_app(
         candidate = require_sar().review(candidate_id, request)
         if candidate is None:
             raise HTTPException(404, f"No candidate {candidate_id}.")
+        security.outcome("candidate_review", request.decision.value, candidate_id=candidate_id)
         return {"candidate": candidate.model_dump(mode="json")}
 
     @app.post("/api/sar/plan")

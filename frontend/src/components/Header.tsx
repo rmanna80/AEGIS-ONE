@@ -35,6 +35,14 @@ export function Header() {
         <span className="panel-title">Mission Control</span>
       </div>
 
+      {state?.injected_faults && state.injected_faults.length > 0 && (
+        <span
+          className="num rounded-sm border border-crit px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wider text-crit"
+          title="AEGIS's copy of the telemetry is being altered on purpose (fault injection)."
+        >
+          Fault injected: {state.injected_faults.join(", ")}
+        </span>
+      )}
       {provenance && (
         <div
           className={`num rounded-sm border px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wider ${PROVENANCE_STYLE[provenance]}`}

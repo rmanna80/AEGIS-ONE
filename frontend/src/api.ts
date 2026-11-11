@@ -9,6 +9,7 @@ import type {
   SarCandidate,
   SarPlan,
   SarStatus,
+  SecurityStatus,
   Scenario,
   SystemInfo,
 } from "./types";
@@ -69,6 +70,7 @@ export const api = {
   perception: () => request<PerceptionStatus>("/api/perception"),
   selectTrack: (trackId: number | null) =>
     post<{ selected_track_id: number | null }>("/api/perception/select", { track_id: trackId }),
+  security: () => request<SecurityStatus>("/api/security"),
   sar: () => request<SarStatus>("/api/sar"),
   sarCandidates: () =>
     request<{ candidates: SarCandidate[]; awaiting_review: number }>("/api/sar/candidates"),

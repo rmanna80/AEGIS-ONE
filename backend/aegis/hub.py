@@ -67,6 +67,9 @@ class TelemetryHub:
         self.extra_checks: list[Callable[[], list[Finding]]] = []
         # Extra top-level fields for the live snapshot (e.g. the other vehicles of a fleet).
         self.snapshot_extras: list[Callable[[], dict[str, Any]]] = []
+        # Transformations of each sampled state before anything uses it. Used only by
+        # the fault injector (simulation testing); altered states are labelled.
+        self.state_filters: list[Callable[[VehicleState], VehicleState]] = []
 
         self.state: VehicleState | None = None
         self.mission = MissionStatus()
@@ -154,6 +157,8 @@ class TelemetryHub:
     async def tick(self) -> None:
         """One sample / evaluate / record / broadcast cycle (public for tests)."""
         state = await self.source.get_state()
+        for alter in self.state_filters:
+            state = alter(state)
         now = time.time()
         self.state = state
         self.ticks += 1

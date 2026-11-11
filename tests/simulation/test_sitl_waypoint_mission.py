@@ -34,7 +34,7 @@ SCENARIO = Path(__file__).resolve().parents[2] / "simulation" / "scenarios" / "o
 
 @pytest.fixture
 async def adapter() -> AsyncIterator[PX4SITLAdapter]:
-    px4 = PX4SITLAdapter(connection_url=os.environ.get("AEGIS_PX4_URL", "udpin://0.0.0.0:14540"))
+    px4 = PX4SITLAdapter(connection_url=os.environ.get("AEGIS_PX4_URL", "udpin://127.0.0.1:14540"))
     await px4.start()
     deadline = time.monotonic() + 60.0
     while time.monotonic() < deadline:

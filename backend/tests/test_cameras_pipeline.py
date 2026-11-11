@@ -299,7 +299,7 @@ def test_video_websocket_and_selection_api(tmp_path: Path) -> None:
         assert client.post("/api/perception/select", json={"track_id": 9999}).status_code == 404
         chosen = client.post("/api/perception/select", json={"track_id": track_id})
         assert chosen.status_code in (200, 404)  # the loop may have moved on; never a 500
-        assert len(hub.extra_checks) == 2  # perception + navigation
+        assert len(hub.extra_checks) == 4  # security + anomaly + navigation + perception
 
 
 def test_camera_port_conflict_disables_perception_but_not_the_backend(tmp_path: Path) -> None:
@@ -327,4 +327,4 @@ def test_camera_port_conflict_disables_perception_but_not_the_backend(tmp_path: 
             assert "another AEGIS backend" in status["reason"]
             assert client.get("/api/health").json()["status"] == "ok"
             # Only navigation's check remains: no permanent "no camera frames" alert.
-            assert len(hub.extra_checks) == 1
+            assert len(hub.extra_checks) == 3  # perception dropped out; the rest remain

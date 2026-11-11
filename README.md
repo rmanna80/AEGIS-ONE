@@ -6,7 +6,7 @@ non-weapon robotics research, environmental inspection and search and rescue, al
 human operator in control.
 
 **Status: Phases 0 to 2 complete; Phase 3 (navigation and mapping), Phase 4 (thermal search and
-rescue) and Phase 5 (multi-vehicle) built and verified with software sensor models on PX4's
+rescue), Phase 5 (multi-vehicle) and Phase 6 (anomaly detection and security monitoring) built and verified with software sensor models on PX4's
 built-in simulator.** A simulated PX4 quadcopter flies
 geofenced, obstacle-checked waypoint missions commanded from the dashboard, with live telemetry,
 alerts, object detection and tracking, 3D occupancy mapping from depth, detour planning, search
@@ -54,6 +54,8 @@ No drone hardware is needed. No physical-flight code path exists in this release
 | Several vehicles at once: shared frame, per-vehicle missions and commands, Hold all | Verified live with two PX4 instances (Demo 5: 8 of 8 criteria) |
 | Route-conflict refusal between vehicles | Verified live |
 | Automatic Hold when two airborne vehicles get too close | Unit-tested; **not triggered in a live flight** |
+| Telemetry anomaly detection (8 checks, advisory) and fault injection to test it | Verified live against PX4 SITL (Demo 6: 8 of 8 criteria) |
+| Command audit log with hash chain, failed-login and remote-command alerts, posture check | Verified (Demo 6 and unit tests) |
 | Thermal imagery rendered by Gazebo, replay of thermal or fleet sessions, fleets under Gazebo | Not built |
 | ROS 2 Jazzy bridge, LiDAR | Not started |
 
@@ -228,6 +230,32 @@ and 4 m vertically, AEGIS asks PX4 to Hold both, once, and leaves the rest to th
 Vehicles never coordinate on their own. The built-in simulator has no collisions, so nothing
 physical is being tested here. The Mission panel, camera, mapping and replay still belong to
 the first vehicle only.
+
+## Demo 6: Anomaly detection and security monitoring
+
+```bash
+bash scripts/run_px4.sh sih
+AEGIS_FAULT_INJECTION=true bash scripts/run_backend.sh
+.venv/bin/python scripts/demo6_security.py --token "$AEGIS_OPERATOR_TOKEN"
+.venv/bin/python scripts/verify_audit.py        # afterwards: was the command log edited?
+```
+
+Eight consistency checks run on the telemetry all the time: position against integrated
+velocity (jump and slow drift), a clock that goes backwards, telemetry that stops changing,
+an implausible battery, distance from the mission route, a flight mode that changes without an
+operator command, and arming without a mission. They raise alerts and nothing else: the
+monitor has no access to vehicle commands and cannot override the autopilot's failsafes.
+
+Every command request, allowed or refused, is written to `audit.jsonl` in the session folder
+with a hash chain, so later edits show up (the token itself is never written). Five wrong
+tokens in a minute raise an alert. The dashboard's **Security** section lists configuration
+findings; one it cannot fix is that the bundled MAVSDK server listens on every network
+interface without authentication.
+
+Fault injection exists to test the monitors. It is off unless the backend is started with
+`AEGIS_FAULT_INJECTION=true`, needs the operator token and an attested simulator, and alters
+only AEGIS's copy of the telemetry: the vehicle keeps flying on correct data. Altered data is
+labelled on screen and in recordings.
 
 ## Replaying a session
 

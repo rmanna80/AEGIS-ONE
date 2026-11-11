@@ -6,6 +6,7 @@ import { Header } from "./components/Header";
 import { FleetPanel } from "./components/FleetPanel";
 import { MissionPanel } from "./components/MissionPanel";
 import { Overview } from "./components/Overview";
+import { SecurityPanel } from "./components/SecurityPanel";
 import { SearchPanel } from "./components/SearchPanel";
 import { useStore } from "./state/store";
 import { useTelemetry } from "./telemetry/useTelemetry";
@@ -141,6 +142,7 @@ export default function App() {
           <MissionPanel />
           {sarEnabled && <SearchPanel />}
           <AlertsPanel />
+          <SecurityPanel />
         </aside>
       </div>
     </div>

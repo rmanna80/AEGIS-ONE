@@ -25,6 +25,9 @@ aircraft, and nothing here is evidence that one would be safe to fly.
 | Routes of different vehicles are kept apart | A mission passing within 10 m of a route another vehicle is flying, without 5 m of height between them, is refused before upload. Timing is ignored, which refuses some safe routes and never accepts a route on the hope of a miss. | `fleet.route_conflicts` |
 | Two vehicles that get too close are stopped, not steered | Within 6 m horizontally and 4 m vertically, AEGIS requests Hold for both, once per encounter, and reports `blocked`. Warning from 12 m / 6 m. Can be turned off with `AEGIS_FLEET_AUTO_HOLD=false`. | `fleet.check_separation` |
 | The operator can stop everything at once | Hold all commands every connected vehicle and reports per vehicle | `api.py`, `FleetPanel.tsx` |
+| Anomaly detection advises and never acts | The anomaly monitor reads telemetry and raises alerts. It is built without the mission executor, so it cannot command the vehicle or interfere with the autopilot's own failsafes. | `anomaly.py`, `tests/test_security.py` |
+| Commands leave a record that shows tampering | Every command request and outcome is appended to a hash-chained audit log; the token is never written | `security.AuditLog`, `scripts/verify_audit.py` |
+| Test faults cannot be mistaken for real data or reach a real vehicle | Fault injection is off by default, needs the operator token and an attested simulator, alters only AEGIS's copy of telemetry, and labels every altered snapshot | `faults.py`, `api.py` |
 
 ## Limits of these mechanisms
 

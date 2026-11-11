@@ -44,6 +44,7 @@ export interface VehicleState {
     pitch_deg: number;
     yaw_deg: number;
   } | null;
+  injected_faults?: string[];
   ground_speed_m_s: number | null;
   vertical_speed_up_m_s: number | null;
   battery: { voltage_v: number | null; remaining_fraction: number | null } | null;
@@ -352,4 +353,22 @@ export interface SarPlan {
     path_length_m: number;
     estimated_search_time_s: number;
   };
+}
+
+// --- Security and anomaly monitoring (mirrors backend/aegis/security.py, anomaly.py)
+
+export interface SecurityStatus {
+  posture: { id: string; level: "ok" | "info" | "warning"; text: string }[];
+  auth_failures_recent: number;
+  auth_failures_total: number;
+  command_requests_total: number;
+  audit: {
+    records: number;
+    file: string | null;
+    recent: { seq: number; t_unix_s: number; event: string; path?: string; result?: string }[];
+  };
+  anomaly:
+    | { enabled: false }
+    | { enabled: true; detectors: Record<string, string>; detections: Record<string, number>; active: string[] };
+  faults: { enabled: boolean; active: { kind: string; remaining_s: number }[] };
 }

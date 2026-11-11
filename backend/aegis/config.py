@@ -23,7 +23,9 @@ class Settings(BaseSettings):
     mode: OperatingMode = OperatingMode.SIMULATION
     vehicle_id: str = "sim-1"
 
-    px4_url: str = "udpin://0.0.0.0:14540"
+    # Listen for the autopilot's MAVLink on this machine only. Use udpin://0.0.0.0:14540
+    # only when the autopilot runs on another machine.
+    px4_url: str = "udpin://127.0.0.1:14540"
     mavsdk_grpc_port: int = 50051
 
     replay_file: Path = REPO_ROOT / "data" / "sample" / "demo1_survey_sih.jsonl"
@@ -82,6 +84,12 @@ class Settings(BaseSettings):
     fleet_size: int = Field(default=1, ge=1, le=4)
     # Ask PX4 to Hold two vehicles that get too close to each other in the air.
     fleet_auto_hold: bool = True
+
+    # Anomaly detection on telemetry (advisory alerts only; it cannot command the vehicle).
+    anomaly: bool = True
+    # Allow the operator to inject faults into AEGIS's copy of the telemetry, to test the
+    # monitors. Simulation mode and an attested simulator only. Off unless set.
+    fault_injection: bool = False
 
     broadcast_hz: float = 10.0
     cors_origins: list[str] = ["http://localhost:5173", "http://127.0.0.1:5173"]

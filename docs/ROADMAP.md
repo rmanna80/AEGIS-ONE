@@ -10,11 +10,11 @@
 | 3 | Navigation and mapping: depth, occupancy, planning, wind | Built and verified with the software depth sensor. Gazebo depth runs on the owner's machine but the map misses its accuracy targets (heading-estimate error). Wind and SLAM not built. |
 | 4 | Thermal and search and rescue | Built and verified live on PX4 SITL with a software thermal model (Demo 3: 8 of 8). No Gazebo-rendered thermal imagery; no thermal replay. |
 | 5 | Multi-drone simulation | Built and verified live with two PX4 instances on the built-in simulator (Demo 5: 8 of 8). The automatic separation Hold is unit-tested only. No Gazebo fleet, no fleet replay; camera, mapping and the mission planner serve the first vehicle only. |
-| 6 | Cybersecurity and anomaly detection | Not started |
+| 6 | Cybersecurity and anomaly detection | Built and verified live on PX4 SITL (Demo 6: 8 of 8). Rule-based checks on the first vehicle only; no learned model; MAVLink is unsigned and the MAVSDK control port is open on all interfaces. |
 | 7 | Raspberry Pi integration | Not started |
 | 8 | Physical hardware readiness (documentation and gating only) | Not started |
 
-## Next milestone: heading error, then Phase 6
+## Next milestone: heading error, then Phase 7
 
 1. Heading estimate under Gazebo. On the pad the autopilot reports about 95 deg where Gazebo has
    the model at 90 deg; the depth map lands about half a metre east and fails Demo 4. Record the
@@ -30,7 +30,11 @@
    deconfliction (today any two legs that pass close are refused, whenever they are flown),
    return legs included in the route check, other vehicles' planned routes on the 3D view,
    a vehicle selector for the mission planner, fleets under Gazebo, fleet replay.
-6. Phase 6: cybersecurity monitoring and anomaly detection.
+6. Remaining Phase 6 items: anomaly checks for every vehicle of a fleet and under Gazebo,
+   detection of a second ground station from MAVLink traffic itself, MAVLink 2 signing, a
+   MAVSDK server bound to localhost, an anchor for the audit log's final hash, a learned
+   model only if the rule-based checks prove insufficient.
+7. Phase 7: Raspberry Pi integration.
 
 ## Known defects and limitations
 

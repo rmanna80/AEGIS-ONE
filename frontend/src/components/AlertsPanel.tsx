@@ -13,7 +13,7 @@ export function AlertsPanel() {
   const messages = useStore((s) => s.snapshot?.autopilot_messages) ?? [];
 
   return (
-    <section className="flex min-h-0 flex-1 flex-col p-3">
+    <section className="flex shrink-0 flex-col p-3">
       <h2 className="panel-title mb-2">
         Active alerts <span className="num">({alerts.length})</span>
       </h2>

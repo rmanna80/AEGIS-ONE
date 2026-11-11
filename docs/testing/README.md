@@ -8,9 +8,9 @@ are a record of what was observed, not a guarantee.
 
 | Suite | Command | Result |
 | --- | --- | --- |
-| Backend unit + API + perception + navigation + search + fleet | `pytest` | 188 passed, 1 skipped here (the SITL tests are collected separately) |
+| Backend unit + API + perception + navigation + search + fleet + security | `pytest` | 203 passed, 1 skipped here (the SITL tests are collected separately) |
 | Lint | `ruff check . && ruff format --check .` | clean |
-| Types | `mypy` (strict) | no issues in 36 source files |
+| Types | `mypy` (strict) | no issues in 39 source files |
 | Frontend unit | `cd frontend && npm test` | 9 passed |
 | Frontend build | `cd frontend && npm run build` | type-checks and builds |
 | Live simulation | `AEGIS_SITL_TESTS=1 pytest tests/simulation -v` | 2 passed in 145 s |
@@ -258,7 +258,55 @@ Read these with care:
 - The dashboard was also driven here through the Fleet panel (plan, confirm, launch two
   vehicles) and screenshotted mid-flight; that run was not followed to landing.
 
+## Anomaly and security results (Phase 6, measured 2026-11-11)
+
+PX4 v1.17.0 SITL on the built-in simulator, open-field mission, backend started with
+`AEGIS_FAULT_INJECTION=true`.
+
+**Demo 6:** 8 of 8 criteria.
+
+| Injected | Expected alert | Raised after |
+| --- | --- | --- |
+| Position drifting at 3 m/s | `nav.position_drift` | 3.8 s |
+| Frozen telemetry | `telemetry.frozen` | 2.2 s |
+| Battery reported at 20% | `battery.implausible` | 0.2 s |
+| Autopilot clock set back 30 s | `telemetry.clock_reversed` | 0.2 s |
+| Position jump of 25 m | `nav.position_jump` | 0.2 s |
+| Hold from outside the operator's command path | `control.unexpected_mode` | 1.2 s |
+| Five requests with a wrong token (all refused) | `security.auth_failures` | 0.2 s |
+
+Also: no anomaly or security alert in 12 s of normal flight; every altered snapshot carried
+its fault label; the vehicle kept flying its mission through the five telemetry faults; the
+audit log (21 records) verified and an edited copy was detected; the vehicle landed at home
+after the operator's Return. Demo 1 was re-run afterwards with the monitors on: 5 of 5, no
+critical alerts. The two live simulation tests pass on the new localhost-only listener.
+
+False alarms: the detectors were replayed over 21 recorded flights (33,465 states, including
+the owner's Gazebo flight); none raised a navigation, telemetry, battery, route or mode alert.
+The largest position-against-velocity disagreement in those clean flights was 2.9 m over 1 s
+and 5.8 m over 10 s; the alert thresholds are 5 m and 10 m. That margin is thin, and the
+flights are all gentle missions on two simulators.
+
+Found while building this, and fixed:
+
+- **Missions could resume part-way.** PX4 remembers its progress through a mission. Submitting
+  the same mission again after an interrupted flight started at a later waypoint instead of
+  the first. The off-route check caught it in the demo's own baseline. Upload now clears the
+  old mission and resets the index; verified on a PX4 instance holding an interrupted mission.
+- **A first version of the drift check never ran.** PX4 corrects the home altitude every couple
+  of seconds in flight, and the monitor treated each correction as a change of frame and
+  discarded its history, so the 10 s check was never evaluated. My first false-alarm run
+  looked clean for that reason. Fixed, and the replay above is from after the fix.
+
+Limits: the checks are fixed rules with hand-set thresholds, on the first vehicle only. A
+careful attacker who alters position and velocity consistently would pass the navigation
+checks. The audit chain cannot show a log truncated at the end or replaced wholesale. The
+"outside Hold" is produced inside AEGIS; no second ground station was connected.
+
 ## Not tested yet
+
+- Anomaly detection during Gazebo flights on the owner's machine (only replayed from one
+  recorded Gazebo flight), and with a fleet.
 
 - Fleets of three or four vehicles, fleets under Gazebo, a fleet with the camera or depth
   pipelines on, and anything about a fleet on the owner's machine.
