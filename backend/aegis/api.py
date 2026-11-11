@@ -133,19 +133,35 @@ def create_app(
         log.info("AEGIS ONE %s starting in %s mode", __version__, settings.mode.value)
         if hub.executor is not None and settings.operator_token is None:
             log.warning("AEGIS_OPERATOR_TOKEN not set; generated for this run: %s", token)
+        nonlocal perception, perception_off_reason
         await hub.start()
-        if perception is not None:
-            log.info(
-                "Perception enabled: camera=%s detector=%s",
-                settings.camera,
-                perception.detector.name,
-            )
-            await perception.start()
-        else:
-            log.info("Perception disabled: %s", perception_off_reason)
         try:
+            if perception is not None:
+                try:
+                    await perception.start()
+                    log.info(
+                        "Perception enabled: camera=%s detector=%s",
+                        settings.camera,
+                        perception.detector.name,
+                    )
+                except OSError as exc:
+                    # e.g. the camera stream port is taken. Perception is optional:
+                    # report it and keep the simulator and dashboard running.
+                    perception_off_reason = f"Camera could not start: {exc}"
+                    if settings.camera == "stream":
+                        perception_off_reason += (
+                            f" Is another AEGIS backend already running? "
+                            f"(port {settings.camera_stream_port})"
+                        )
+                    log.error(perception_off_reason)
+                    hub.extra_checks.clear()
+                    perception = None
+            if perception is None:
+                log.info("Perception disabled: %s", perception_off_reason)
             yield
         finally:
+            # Always runs, including when startup fails part-way, so the MAVSDK
+            # server child process is never left behind.
             if perception is not None:
                 await perception.stop()
             await hub.stop()

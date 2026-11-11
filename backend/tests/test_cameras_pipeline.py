@@ -299,3 +299,30 @@ def test_video_websocket_and_selection_api(tmp_path: Path) -> None:
         chosen = client.post("/api/perception/select", json={"track_id": track_id})
         assert chosen.status_code in (200, 404)  # the loop may have moved on; never a 500
         assert len(hub.extra_checks) == 1
+
+
+def test_camera_port_conflict_disables_perception_but_not_the_backend(tmp_path: Path) -> None:
+    """Regression: a busy stream port crashed startup and orphaned the MAVSDK server."""
+    import socket
+
+    with socket.socket() as blocker:
+        blocker.bind(("127.0.0.1", 0))
+        blocker.listen()
+        port = blocker.getsockname()[1]
+        camera = StreamCameraAdapter(port=port)
+        pipeline = PerceptionPipeline(camera, BrightBlobDetector())
+        vehicle = FakeVehicle()
+        hub = TelemetryHub(vehicle, vehicle)
+        settings = Settings(
+            camera="stream",
+            camera_stream_port=port,
+            frontend_dist=tmp_path / "x",
+            data_dir=tmp_path,
+        )
+        with TestClient(create_app(settings, hub, pipeline)) as client:
+            status = client.get("/api/perception").json()
+            assert status["enabled"] is False
+            assert "Camera could not start" in status["reason"]
+            assert "another AEGIS backend" in status["reason"]
+            assert client.get("/api/health").json()["status"] == "ok"
+            assert hub.extra_checks == []  # no permanent "no camera frames" alert
