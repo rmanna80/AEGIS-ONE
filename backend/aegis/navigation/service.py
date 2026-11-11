@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import json
 import logging
 import math
 import time
@@ -32,7 +33,8 @@ log = logging.getLogger(__name__)
 
 DEPTH_STALE_S = 2.0  # in simulation seconds
 LOOKAHEAD_M = 30.0
-MAX_VOXELS_SENT = 30000
+MAX_VOXELS_SENT = 15000
+MAX_MAP_UPDATE_HZ = 5.0  # depth frames beyond this rate are dropped, newest wins
 
 
 def grid_spec_for(scenario: dict[str, Any], resolution_m: float) -> GridSpec:
@@ -78,6 +80,8 @@ class NavigationService:
         self._held_for: str | None = None  # mission id already put on hold by this service
         self.nearest_obstacle_m: float | None = None
         self.last_error: str | None = None
+        self._occupied_voxels = 0
+        self.integrate_ms: float | None = None
 
     # ------------------------------------------------------------------ lifecycle
 
@@ -116,9 +120,16 @@ class NavigationService:
                     pose = pose_from_state(self.hub.state)
                 if pose is None:
                     continue
+                started = time.monotonic()
                 await asyncio.to_thread(self.live.integrate, frame, pose)
+                self._occupied_voxels = int(np.count_nonzero(self.live.occupied_mask))
                 self._last_frame = frame
                 self._last_frame_at = time.monotonic()
+                self.integrate_ms = (self._last_frame_at - started) * 1000.0
+                # Bound the CPU spent on mapping so telemetry and the simulator are not starved.
+                await asyncio.sleep(
+                    max(0.0, 1.0 / MAX_MAP_UPDATE_HZ - (self._last_frame_at - started))
+                )
                 self.last_error = None
             except asyncio.CancelledError:
                 raise
@@ -285,6 +296,7 @@ class NavigationService:
         self.live.log_odds[...] = loaded.log_odds
         self.live.frames_integrated = loaded.frames_integrated
         self.live.revision += 1
+        self._occupied_voxels = int(np.count_nonzero(self.live.occupied_mask))
 
     def accuracy(self) -> dict[str, Any]:
         """Score the reconstructed map against the scenario's ground-truth geometry."""
@@ -312,6 +324,10 @@ class NavigationService:
             "voxels": np.round(centres, 2).reshape(-1).tolist(),
         }
 
+    def map_json(self, since_revision: int = -1) -> bytes:
+        """The map payload already serialised, so a large map is encoded off the event loop."""
+        return json.dumps(self.map_payload(since_revision), separators=(",", ":")).encode()
+
     def status(self) -> dict[str, Any]:
         frame = self._last_frame
         return {
@@ -320,7 +336,8 @@ class NavigationService:
             "depth_provenance": frame.provenance.value if frame else None,
             "depth_age_s": self.depth_age_s(),
             "frames_integrated": self.live.frames_integrated,
-            "occupied_voxels": int(np.count_nonzero(self.live.occupied_mask)),
+            "occupied_voxels": self._occupied_voxels,
+            "integrate_ms": self.integrate_ms,
             "map_revision": self.live.revision,
             "resolution_m": self.live.spec.resolution_m,
             "clearance_m": self.checker.clearance_m,

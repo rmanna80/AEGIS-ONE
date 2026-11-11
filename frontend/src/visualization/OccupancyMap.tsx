@@ -49,7 +49,8 @@ export function OccupancyMap() {
       frustumCulled={false}
     >
       <boxGeometry args={[size, size, size]} />
-      <meshStandardMaterial roughness={0.8} transparent opacity={0.85} />
+      {/* Opaque on purpose: thousands of transparent instances are costly to draw. */}
+      <meshStandardMaterial roughness={0.8} />
     </instancedMesh>
   );
 }

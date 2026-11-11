@@ -82,7 +82,7 @@ def main() -> int:
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--depth", action="store_true", help="forward the depth camera")
     parser.add_argument("--port", type=int, help="default 5600 (camera) or 5601 (depth)")
-    parser.add_argument("--max-fps", type=float, default=15.0)
+    parser.add_argument("--max-fps", type=float, help="default 15 (camera) or 5 (depth)")
     args = parser.parse_args()
 
     topic = args.topic or find_camera_topic(args.depth)
@@ -91,7 +91,8 @@ def main() -> int:
     sock = socket.create_connection((args.host, port))
     lock = threading.Lock()
     state = {"last_sent": 0.0, "sent": 0, "skipped_format": 0, "alive": True}
-    min_period = 1.0 / args.max_fps
+    max_fps = args.max_fps or (5.0 if args.depth else 15.0)
+    min_period = 1.0 / max_fps
 
     def on_image(message: Image) -> None:
         now = time.monotonic()
@@ -128,7 +129,7 @@ def main() -> int:
     node = Node()
     if not node.subscribe(Image, topic, on_image):
         sys.exit(f"Could not subscribe to {topic}")
-    print(f"Forwarding {topic} -> {args.host}:{port} at up to {args.max_fps:g} fps")
+    print(f"Forwarding {topic} -> {args.host}:{port} at up to {max_fps:g} fps")
     try:
         while state["alive"]:
             time.sleep(5.0)

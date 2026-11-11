@@ -115,11 +115,14 @@ class OccupancyGrid:
         if len(points) == 0:
             return
         idx, valid = self.to_index(points)
-        idx = np.unique(idx[valid], axis=0)  # at most one update per voxel per frame
+        idx = idx[valid]
         if len(idx) == 0:
             return
-        i, j, k = idx[:, 0], idx[:, 1], idx[:, 2]
-        self.log_odds[i, j, k] = np.clip(self.log_odds[i, j, k] + delta, self.L_MIN, self.L_MAX)
+        # At most one update per voxel per frame. Deduplicating flat indices is far
+        # cheaper than np.unique over rows.
+        flat = np.unique(np.ravel_multi_index(idx.T, self.spec.size_cells))
+        values = self.log_odds.reshape(-1)  # a view: the grid is C-contiguous
+        values[flat] = np.clip(values[flat] + delta, self.L_MIN, self.L_MAX)
 
     # -------------------------------------------------------------------- queries
 

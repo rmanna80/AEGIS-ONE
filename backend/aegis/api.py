@@ -19,7 +19,15 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, Any
 
-from fastapi import Depends, FastAPI, Header, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import (
+    Depends,
+    FastAPI,
+    Header,
+    HTTPException,
+    Response,
+    WebSocket,
+    WebSocketDisconnect,
+)
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -506,11 +514,12 @@ def create_app(
         return navigation.status()
 
     @app.get("/api/map")
-    async def occupancy_map(since: int = -1) -> dict[str, Any]:
+    async def occupancy_map(since: int = -1) -> Response:
         """Occupied voxels of the live map; ``since`` avoids resending an unchanged map."""
         if navigation is None:
             raise HTTPException(409, "Navigation is not enabled.")
-        return await asyncio.to_thread(navigation.map_payload, since)
+        body = await asyncio.to_thread(navigation.map_json, since)
+        return Response(content=body, media_type="application/json")
 
     @app.get("/api/map/accuracy")
     async def map_accuracy() -> dict[str, Any]:
