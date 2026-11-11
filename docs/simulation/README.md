@@ -71,6 +71,26 @@ Add an environment by writing `simulation/scenarios/<name>.json` and running
   real-time factor has not been measured under load.
 - **Rotor animation** in the 3D view reflects the armed flag only, not rotor speed.
 
+## When Gazebo cannot keep up
+
+The dashboard header shows **Sim speed**; the backend log prints it every 30 s. Below about
+0.5x everything (missions, heartbeats, timeouts) stretches, and at a few percent the system is
+unusable. Camera sensors are the cost: PX4's stock models render 1920x1080 colour plus 640x480
+depth at 30 Hz (`gazebo-depth`) or 1280x960 at 30 Hz (`gazebo-cam`).
+
+1. **Check the renderer.** `run_px4.sh` prints it. `llvmpipe` means Gazebo is rendering on the
+   CPU. Under WSL2, GPU acceleration needs a current Windows GPU driver and WSLg
+   (`wsl --update` from PowerShell); `glxinfo -B` should then name your GPU (often via "D3D12").
+2. **Lighten the cameras:** `AEGIS_LIGHT_SENSORS=1 bash scripts/run_px4.sh gazebo-depth urban`
+   drops them to 640x360 + 320x240 at 10 Hz (and `gazebo-cam` to 640x480 at 15 Hz). It edits two
+   model files in your PX4 checkout, keeps the originals, and restores them the next time you
+   launch without the variable.
+3. **Drop the Gazebo window:** `HEADLESS=1 bash scripts/run_px4.sh ...`. Use the dashboard to watch.
+4. **Use the built-in simulator** (`sih`) with `AEGIS_DEPTH=raycast` when you only need
+   mapping and planning, not rendered imagery.
+
+None of the Gazebo performance advice has been measured by this project yet.
+
 ## Ports
 
 | Port | Purpose |

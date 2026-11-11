@@ -14,6 +14,8 @@ for i in 1 2 3; do
   sleep 1
 done
 
+echo "== backend health: $(curl -s -m 5 "$API/api/health")"
+echo "== camera models: $(python3 scripts/gz_light_sensors.py status "${PX4_DIR:-$HOME/PX4-Autopilot}" 2>&1 | tr '\n' ' ')"
 echo "== vehicle"
 curl -s -m 5 "$API/api/state" | python3 -c '
 import json, sys, time

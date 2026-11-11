@@ -47,6 +47,8 @@ class TelemetryHub:
         self._task: asyncio.Task[None] | None = None
         self._recording_open = False
         self.ticks = 0
+        self.loop_lag_s = 0.0
+        self.max_loop_lag_s = 0.0
 
     async def start(self) -> None:
         await self.source.start()
@@ -91,7 +93,23 @@ class TelemetryHub:
 
     async def _loop(self) -> None:
         next_tick = time.monotonic()
+        last_report = 0.0
         while True:
+            # How late this tick is. A healthy backend is within a few milliseconds; a
+            # large value means the process is starved of CPU or something blocked it.
+            lag = time.monotonic() - next_tick
+            self.loop_lag_s = lag
+            self.max_loop_lag_s = max(self.max_loop_lag_s, lag)
+            if lag > 1.0 and time.monotonic() - last_report > 10.0:
+                last_report = time.monotonic()
+                log.warning(
+                    "Backend fell %.1f s behind (worst so far %.1f s). The machine is "
+                    "overloaded or the backend was blocked; the dashboard will show stale data.",
+                    lag,
+                    self.max_loop_lag_s,
+                )
+            if lag > 5.0:
+                next_tick = time.monotonic()  # do not try to replay the missed ticks
             try:
                 await self.tick()
             except asyncio.CancelledError:
@@ -143,6 +161,17 @@ class TelemetryHub:
             # Alerts are recorded even while the link is down - that is when they matter.
             for alert in changed:
                 self.recorder.record_event("alert", alert.model_dump(mode="json"))
+
+        if self.ticks % max(1, round(30.0 / self.period_s)) == 0:
+            rtf = state.sim_real_time_factor
+            log.info(
+                "status: vehicle %s, mode %s, mission %s, sim speed %s, backend lag %.2f s",
+                "connected" if state.connected else "NOT connected",
+                state.flight_mode,
+                self.mission.phase.value,
+                f"{rtf:.2f}x" if rtf is not None else "n/a",
+                self.loop_lag_s,
+            )
 
         message = self.snapshot()
         for queue in list(self._subscribers):

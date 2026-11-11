@@ -322,6 +322,8 @@ def create_app(
             "version": __version__,
             "mode": settings.mode.value,
             "hub_ticks": hub.ticks,
+            "backend_lag_s": round(hub.loop_lag_s, 3),
+            "worst_backend_lag_s": round(hub.max_loop_lag_s, 3),
             "vehicle_connected": bool(state and state.connected),
         }
 

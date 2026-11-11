@@ -61,6 +61,8 @@ class Flight:
         self.started = time.monotonic()
         self.status: dict[str, Any] = {}
         self._last_line = ""
+        self._speed: float | None = None
+        self._warned_link = False
 
     def elapsed(self) -> float:
         return time.monotonic() - self.started
@@ -81,6 +83,16 @@ class Flight:
                 )
                 self.critical.append(detail)
                 print(f"[{self.elapsed():6.1f}s] CRITICAL ALERT {detail}")
+        speed = (state or {}).get("sim_real_time_factor")
+        if speed is not None and (
+            self._speed is None or abs(speed - self._speed) > 0.3 * max(self._speed, 0.05)
+        ):
+            self._speed = speed
+            note = "  <-- the simulator cannot keep up" if speed < 0.5 else ""
+            print(f"[{self.elapsed():6.1f}s] simulation speed {speed:.2f}x real time{note}")
+        if state and not state["connected"] and not self._warned_link:
+            self._warned_link = True
+            print(f"[{self.elapsed():6.1f}s] telemetry from the vehicle has stopped")
         line = f"{self.status['phase']:>10}  {self.status['message']}"
         if line != self._last_line:
             print(f"[{self.elapsed():6.1f}s] {line}")

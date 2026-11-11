@@ -170,11 +170,13 @@ sensing, and the API paths (rejection before upload, planning, map endpoints, ma
   reports the Gazebo launch works on WSL2.
 - A complete Demo 2 run at 6 m. The owner's run at 6 m tracked `person`, `car` and `truck`
   through the return leg; the final verdict was not captured.
-- The Gazebo depth camera path. First attempt (owner, 2026-11-11): no depth frames reached
-  AEGIS because the bridge looked for the wrong topic name (PX4's depth model publishes on
-  `/depth_camera`). Fixed, not yet re-run. That attempt also showed a mission being accepted
-  and then immediately held; missions are now refused before take-off when a configured
-  depth sensor is silent.
+- A completed Gazebo depth run. Owner's attempts on 2026-11-11: (1) no frames, because the
+  bridge looked for the wrong topic (fixed); (2) depth frames arrived and were fused at about
+  4.5 Hz, the mission started and reached waypoint 1 with the simulation at 0.50x, then from
+  about 45 s in MAVSDK reported heartbeat timeouts and slow callbacks, parameter reads timed
+  out, depth frames stopped and the dashboard went stale. Cause not established; consistent
+  with Gazebo (two cameras at 30 Hz) stalling the machine. Not reproduced here: the backend fed
+  640x480 depth at 15 Hz kept telemetry gaps under 0.15 s.
 - Mapping accuracy with Gazebo depth, where rendered models differ from the ground-truth boxes.
 - Mapping while the simulation runs well below real time.
 - Detection on Gazebo-rendered imagery (rendered people and vehicles may detect poorly).
