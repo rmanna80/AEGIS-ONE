@@ -46,6 +46,7 @@ from aegis.missions import (
     validate_mission,
 )
 from aegis.recording import FlightRecorder, RecordedTelemetryAdapter
+from aegis.watchdog import StallWatchdog, system_snapshot
 
 if TYPE_CHECKING:
     from aegis.navigation.service import NavigationService
@@ -240,12 +241,16 @@ def create_app(
         hub.extra_checks.append(perception_findings)
         perception_check = perception_findings
 
+    watchdog = StallWatchdog()
+
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
         log.info("AEGIS ONE %s starting in %s mode", __version__, settings.mode.value)
         if hub.executor is not None and settings.operator_token is None:
             log.warning("AEGIS_OPERATOR_TOKEN not set; generated for this run: %s", token)
         nonlocal perception, perception_off_reason, navigation, navigation_off_reason
+        log.info("System at start: %s", system_snapshot() or "n/a")
+        await watchdog.start()
         await hub.start()
         try:
             if perception is not None:
@@ -290,6 +295,7 @@ def create_app(
             if perception is not None:
                 await perception.stop()
             await hub.stop()
+            await watchdog.stop()
 
     app = FastAPI(title="AEGIS ONE", version=__version__, lifespan=lifespan)
     app.add_middleware(
@@ -324,6 +330,9 @@ def create_app(
             "hub_ticks": hub.ticks,
             "backend_lag_s": round(hub.loop_lag_s, 3),
             "worst_backend_lag_s": round(hub.max_loop_lag_s, 3),
+            "stalls": watchdog.stalls,
+            "longest_stall_s": round(watchdog.longest_stall_s, 1),
+            "system": system_snapshot(),
             "vehicle_connected": bool(state and state.connected),
         }
 

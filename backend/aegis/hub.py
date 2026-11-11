@@ -15,6 +15,7 @@ from aegis.interfaces import MissionExecutor, VehicleTelemetrySource
 from aegis.missions import Geofence, Mission, MissionPhase, MissionStatus
 from aegis.recording import FlightRecorder
 from aegis.safety import AlertTracker, Finding, SafetyLimits, evaluate
+from aegis.watchdog import system_snapshot
 
 log = logging.getLogger(__name__)
 
@@ -162,15 +163,16 @@ class TelemetryHub:
             for alert in changed:
                 self.recorder.record_event("alert", alert.model_dump(mode="json"))
 
-        if self.ticks % max(1, round(30.0 / self.period_s)) == 0:
+        if self.ticks % max(1, round(10.0 / self.period_s)) == 0:
             rtf = state.sim_real_time_factor
             log.info(
-                "status: vehicle %s, mode %s, mission %s, sim speed %s, backend lag %.2f s",
+                "status: vehicle %s, mode %s, mission %s, sim speed %s, backend lag %.2f s; %s",
                 "connected" if state.connected else "NOT connected",
                 state.flight_mode,
                 self.mission.phase.value,
                 f"{rtf:.2f}x" if rtf is not None else "n/a",
                 self.loop_lag_s,
+                system_snapshot(),
             )
 
         message = self.snapshot()
