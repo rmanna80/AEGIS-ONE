@@ -42,3 +42,39 @@ async def test_blocked_event_loop_is_reported_with_the_guilty_stack(
 def test_snapshots_never_raise() -> None:
     assert isinstance(system_snapshot(), str)
     assert "thread" in thread_stacks()
+
+
+def test_top_memory_processes_names_this_process() -> None:
+    import os
+
+    from aegis.watchdog import memory_available_mb, top_memory_processes
+
+    hog = bytearray(120 * 1024 * 1024)  # make this test process large enough to be listed
+    hog[::4096] = b"x" * len(hog[::4096])
+    listing = top_memory_processes(count=50)
+    assert f"[{os.getpid()}]" in listing
+    assert " MB" in listing
+    available = memory_available_mb()
+    assert available is not None and available > 0
+
+
+def test_low_memory_raises_host_alert() -> None:
+    import pytest
+
+    from aegis import hub
+    from aegis.contracts import Severity
+
+    patch = pytest.MonkeyPatch()
+    try:
+        patch.setattr(hub, "memory_available_mb", lambda: 8000)
+        assert hub.host_findings() == []
+        patch.setattr(hub, "memory_available_mb", lambda: 900)
+        [(code, severity, message)] = hub.host_findings()
+        assert (code, severity) == ("host.memory_low", Severity.WARNING)
+        assert "900 MB" in message
+        patch.setattr(hub, "memory_available_mb", lambda: 100)
+        assert hub.host_findings()[0][1] is Severity.CRITICAL
+        patch.setattr(hub, "memory_available_mb", lambda: None)
+        assert hub.host_findings() == []
+    finally:
+        patch.undo()

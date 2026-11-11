@@ -9,9 +9,11 @@
 #
 # Use the same scenario for the backend: AEGIS_SCENARIO=urban bash scripts/run_backend.sh
 #
-# If Gazebo cannot keep up (dashboard "Sim speed" well below 1.0x), lower the camera load:
-#   AEGIS_LIGHT_SENSORS=1 bash scripts/run_px4.sh gazebo-depth urban
-# and/or run without the Gazebo window:  HEADLESS=1 bash scripts/run_px4.sh ...
+# The camera vehicles run with reduced camera settings by default (640x360 + 320x240 at
+# 10 Hz for gazebo-depth, 640x480 at 15 Hz for gazebo-cam). PX4's stock settings (1080p
+# colour at 30 Hz) exhausted memory on the owner's WSL2 machine within about a minute.
+# To use the stock cameras anyway:  AEGIS_LIGHT_SENSORS=0 bash scripts/run_px4.sh gazebo-depth
+# To run without the Gazebo window: HEADLESS=1 bash scripts/run_px4.sh ...
 #
 # Reset procedure: Ctrl+C, then run it again. PX4 starts landed and disarmed at
 # home. MAVLink for AEGIS is on UDP 14540 (localhost only).
@@ -42,10 +44,15 @@ case "$SIM" in
       echo "This world uses models from Gazebo Fuel; the first launch downloads them (needs internet)."
     fi
     # Camera load. Reversible: see scripts/gz_light_sensors.py.
-    if [ "${AEGIS_LIGHT_SENSORS:-0}" = "1" ]; then
+    if [ "${AEGIS_LIGHT_SENSORS:-1}" = "1" ]; then
       python3 "$REPO_ROOT/scripts/gz_light_sensors.py" apply "$PX4_DIR"
     else
       python3 "$REPO_ROOT/scripts/gz_light_sensors.py" restore "$PX4_DIR" | grep -v "already stock" || true
+      if [ "$SIM" != "gazebo" ]; then
+        echo "WARNING: stock camera settings. On the owner's WSL2 machine this used up all memory" >&2
+        echo "         in about a minute and froze the simulator. Watch 'memory available' in the" >&2
+        echo "         backend log." >&2
+      fi
     fi
     # Gazebo renders camera sensors with OpenGL. Without GPU acceleration that falls back
     # to the CPU (llvmpipe), which is the usual reason a camera simulation runs far below real time.
@@ -64,7 +71,7 @@ case "$SIM" in
           else
             echo "Graphics renderer: ${RENDERER:-unknown}"
             echo "WARNING: Gazebo will render on the CPU. Expect the simulation to run well below" >&2
-            echo "         real time with cameras. Try AEGIS_LIGHT_SENSORS=1 and HEADLESS=1, and see" >&2
+            echo "         real time with cameras. Try HEADLESS=1, and see" >&2
             echo "         docs/simulation/README.md (GPU acceleration under WSL2)." >&2
           fi ;;
         *) echo "Graphics renderer: $RENDERER" ;;

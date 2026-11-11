@@ -85,17 +85,29 @@ depth at 30 Hz (`gazebo-depth`) or 1280x960 at 30 Hz (`gazebo-cam`).
    `D3D12 (AMD Radeon(TM) Graphics)`. With more than one GPU, pick one with
    `MESA_D3D12_DEFAULT_ADAPTER_NAME` (a substring of its name, e.g. `NVIDIA`). If D3D12 is not
    offered at all: `wsl --update`, `wsl --shutdown`, and a current Windows GPU driver.
-2. **Lighten the cameras:** `AEGIS_LIGHT_SENSORS=1 bash scripts/run_px4.sh gazebo-depth urban`
-   drops them to 640x360 + 320x240 at 10 Hz (and `gazebo-cam` to 640x480 at 15 Hz). It edits two
-   model files in your PX4 checkout, keeps the originals, and restores them the next time you
-   launch without the variable.
+2. **Camera load.** The camera vehicles launch with reduced camera settings by default: 640x360
+   colour + 320x240 depth at 10 Hz for `gazebo-depth`, 640x480 at 15 Hz for `gazebo-cam`. The
+   script edits two model files in your PX4 checkout and keeps the originals;
+   `AEGIS_LIGHT_SENSORS=0 bash scripts/run_px4.sh ...` restores PX4's stock cameras.
 3. **Drop the Gazebo window:** `HEADLESS=1 bash scripts/run_px4.sh ...`. Use the dashboard to watch.
 4. **Use the built-in simulator** (`sih`) with `AEGIS_DEPTH=raycast` when you only need
    mapping and planning, not rendered imagery.
 
-Measured on the owner's machine (software rendering): stock `gazebo-depth` ran at 0.5x and then
-stalled; with `AEGIS_LIGHT_SENSORS=1 HEADLESS=1` it held 1.00x through a full mission. Gazebo on
-the D3D12 renderer has not been run yet.
+### Why the stock cameras are not the default
+
+Reported from the owner's machine (WSL2, 15.4 GB given to WSL, D3D12 renderer), stock
+`gazebo-depth urban`: the simulation held 1.00x, but the backend's status line showed available
+memory falling by about 1.8 GB every 10 s (8.0 GB to under 0.1 GB in a minute), then swap filling
+to its 4 GB limit, after which the simulator and the backend froze together (`BACKEND FROZEN` in
+the log, dashboard lamps red, sim speed 0.00x). The earlier "slow simulator" explanations for
+that freeze were wrong. With the reduced cameras and `HEADLESS=1` the same machine held 1.00x
+through a full mission.
+
+Not yet known: which process holds the memory. The rate is close to uncompressed 1920x1080 colour
+at 30 Hz (186 MB/s), which is why the reduced cameras are the default, but that is an inference.
+The backend now names the largest processes in its log whenever memory is short or dropping fast,
+raises a `host.memory_low` alert on the dashboard below 1.5 GB available, and
+`bash scripts/diagnose.sh` lists them too.
 
 ## Ports
 

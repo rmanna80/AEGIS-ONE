@@ -35,5 +35,7 @@ echo "== perception: $(curl -s -m 5 "$API/api/perception")"
 
 echo "== busiest processes"
 ps -eo pcpu,pmem,etimes,args --sort=-pcpu | head -9 | cut -c1-130
+echo "== largest processes by memory (resident MB)"
+ps -eo rss,pmem,args --sort=-rss | head -7 | awk '{printf "   %6d MB  %s%%  ", $1/1024, $2; for (i=3;i<=NF&&i<9;i++) printf "%s ", $i; print ""}' | tail -6 | cut -c1-130
 echo "== AEGIS processes"
 pgrep -af "uvicorn aegis|mavsdk_server|gz_camera_bridge|bin/px4|gz sim|ruby.*gz" | cut -c1-120 || echo "   none found"

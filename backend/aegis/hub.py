@@ -10,14 +10,38 @@ import time
 from collections.abc import Callable
 from typing import Any
 
-from aegis.contracts import Alert, VehicleState
+from aegis.contracts import Alert, Severity, VehicleState
 from aegis.interfaces import MissionExecutor, VehicleTelemetrySource
 from aegis.missions import Geofence, Mission, MissionPhase, MissionStatus
 from aegis.recording import FlightRecorder
 from aegis.safety import AlertTracker, Finding, SafetyLimits, evaluate
-from aegis.watchdog import system_snapshot
+from aegis.watchdog import memory_available_mb, system_snapshot, top_memory_processes
 
 log = logging.getLogger(__name__)
+
+LOW_MEMORY_MB = 1500
+CRITICAL_MEMORY_MB = 400
+
+
+def host_findings() -> list[Finding]:
+    """Conditions of the computer running the backend and simulator (not of the vehicle).
+
+    Running out of memory freezes the simulator and this backend together, which
+    otherwise looks like a lost vehicle link, so it is raised as its own alert.
+    """
+    available = memory_available_mb()
+    if available is None or available >= LOW_MEMORY_MB:
+        return []
+    severity = Severity.CRITICAL if available < CRITICAL_MEMORY_MB else Severity.WARNING
+    return [
+        (
+            "host.memory_low",
+            severity,
+            f"This computer has only {available} MB of memory left; the simulator and "
+            "dashboard will freeze if it runs out. See the backend log for the largest processes.",
+        )
+    ]
+
 
 _ACTIVE_PHASES = {MissionPhase.UPLOADING, MissionPhase.ACTIVE, MissionPhase.RETURNING}
 
@@ -48,6 +72,8 @@ class TelemetryHub:
         self._task: asyncio.Task[None] | None = None
         self._recording_open = False
         self.ticks = 0
+        self._host_findings: list[Finding] = []
+        self._last_available_mb = memory_available_mb() or 0
         self.loop_lag_s = 0.0
         self.max_loop_lag_s = 0.0
 
@@ -138,6 +164,9 @@ class TelemetryHub:
         fence = self.geofence if self.mission.phase in _ACTIVE_PHASES else None
 
         findings = evaluate(state, now, self.limits, fence)
+        if self.ticks % 10 == 0:
+            self._host_findings = host_findings()
+        findings.extend(self._host_findings)
         for check in self.extra_checks:
             findings.extend(check())
         changed: list[Alert] = self.alerts.update(state, findings, now)
@@ -174,6 +203,19 @@ class TelemetryHub:
                 self.loop_lag_s,
                 system_snapshot(),
             )
+            available = memory_available_mb()
+            if available is not None and (
+                available < LOW_MEMORY_MB or available < self._last_available_mb - 500
+            ):
+                # Memory is short or shrinking fast: name the processes that hold it.
+                log.warning(
+                    "Memory: %d MB available (was %d MB ten seconds ago). Largest processes: %s",
+                    available,
+                    self._last_available_mb,
+                    top_memory_processes() or "n/a",
+                )
+            if available is not None:
+                self._last_available_mb = available
 
         message = self.snapshot()
         for queue in list(self._subscribers):

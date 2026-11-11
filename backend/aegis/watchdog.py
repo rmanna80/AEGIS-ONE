@@ -53,6 +53,49 @@ def system_snapshot() -> str:
     return "; ".join(parts)
 
 
+def memory_available_mb() -> int | None:
+    """MemAvailable in MB (Linux), or None when it cannot be read."""
+    with contextlib.suppress(OSError, ValueError, IndexError):
+        for line in Path("/proc/meminfo").read_text().splitlines():
+            if line.startswith("MemAvailable:"):
+                return int(line.split()[1]) // 1024
+    return None
+
+
+def top_memory_processes(count: int = 4) -> str:
+    """The processes holding the most memory (resident + swapped), largest first.
+
+    Read from /proc, so it names the culprit when the machine runs out of memory.
+    Empty on systems without /proc.
+    """
+    usage: list[tuple[int, int, str, str]] = []
+    with contextlib.suppress(OSError):
+        for entry in Path("/proc").iterdir():
+            if not entry.name.isdigit():
+                continue
+            try:
+                fields: dict[str, str] = {}
+                for line in (entry / "status").read_text().splitlines():
+                    key, _, value = line.partition(":")
+                    if key in ("Name", "VmRSS", "VmSwap"):
+                        fields[key] = value.strip()
+                rss = int(fields.get("VmRSS", "0 kB").split()[0]) // 1024
+                swap = int(fields.get("VmSwap", "0 kB").split()[0]) // 1024
+                if rss + swap < 50:
+                    continue
+                cmdline = (
+                    (entry / "cmdline").read_bytes().replace(b"\0", b" ").decode(errors="replace")
+                )
+            except (OSError, ValueError, IndexError):
+                continue  # the process exited while we were reading it
+            usage.append((rss + swap, int(entry.name), fields.get("Name", "?"), cmdline.strip()))
+    usage.sort(reverse=True)
+    return ", ".join(
+        f"{name}[{pid}] {mb} MB ({cmdline[:60]})" if cmdline else f"{name}[{pid}] {mb} MB"
+        for mb, pid, name, cmdline in usage[:count]
+    )
+
+
 def thread_stacks(limit: int = 8) -> str:
     names = {t.ident: t.name for t in threading.enumerate()}
     blocks = []
@@ -108,9 +151,11 @@ class StallWatchdog:
                 self.longest_stall_s = max(self.longest_stall_s, overslept)
                 log.error(
                     "BACKEND FROZEN for %.1f s: no thread in the backend ran at all, so the whole "
-                    "process or machine stalled.\nSystem now: %s\nThreads now:\n%s",
+                    "process or machine stalled.\nSystem now: %s\nLargest processes: %s\n"
+                    "Threads now:\n%s",
                     overslept,
                     system_snapshot() or "n/a",
+                    top_memory_processes() or "n/a",
                     thread_stacks(limit=4),
                 )
                 reported = False
@@ -134,9 +179,10 @@ class StallWatchdog:
                 verdict = "other threads kept running, so Python code is blocking the event loop"
             log.error(
                 "BACKEND STALL: the event loop has been silent for %.1f s; %s.\n"
-                "System: %s\nWhat each thread is doing:\n%s",
+                "System: %s\nLargest processes: %s\nWhat each thread is doing:\n%s",
                 silent,
                 verdict,
                 system_snapshot() or "n/a",
+                top_memory_processes() or "n/a",
                 thread_stacks(),
             )
