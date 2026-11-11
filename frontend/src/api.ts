@@ -60,6 +60,7 @@ export const api = {
       mission,
       from_waypoint: fromWaypoint,
     }),
+  activeMission: () => request<{ mission: Mission | null }>("/api/missions/active"),
   navigation: () => request<NavigationStatus>("/api/navigation"),
   map: (since: number) => request<MapPayload>(`/api/map?since=${since}`),
   submit: (mission: Mission, token: string) =>

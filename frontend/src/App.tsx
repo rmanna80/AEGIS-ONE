@@ -82,6 +82,27 @@ export default function App() {
     };
   }, [setScenario, setSystem, setPerception, setNavigation, setMap, setSar]);
 
+  // A mission can be started from outside this page (a demo script, another browser).
+  // Draw the route that is actually being flown, not whatever the planner last held.
+  const flownId = useStore((s) => s.snapshot?.mission.mission_id ?? null);
+  const flownPhase = useStore((s) => s.snapshot?.mission.phase ?? "idle");
+  const draftId = useStore((s) => s.draft?.mission_id ?? null);
+  const setDraft = useStore((s) => s.setDraft);
+  useEffect(() => {
+    const inFlight = ["uploading", "active", "returning"].includes(flownPhase);
+    if (!inFlight || flownId === null || flownId === draftId) return;
+    let cancelled = false;
+    api
+      .activeMission()
+      .then(({ mission }) => {
+        if (!cancelled && mission && mission.mission_id === flownId) setDraft(mission);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [flownId, flownPhase, draftId, setDraft]);
+
   return (
     <div className="flex h-full min-w-[1100px] flex-col">
       <Header />

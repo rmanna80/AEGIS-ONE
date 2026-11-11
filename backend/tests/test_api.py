@@ -214,3 +214,15 @@ async def test_hub_raises_and_clears_alert_on_injected_fault(tmp_path: Path) -> 
 def test_physical_mode_cannot_be_configured() -> None:
     with pytest.raises(ValueError, match="Physical flight is not available"):
         Settings(mode="physical")  # type: ignore[arg-type]
+
+
+def test_active_mission_is_readable_by_every_display(
+    ctx: tuple[TestClient, FakeVehicle, TelemetryHub],
+) -> None:
+    client, _, _ = ctx
+    assert client.get("/api/missions/active").json() == {"mission": None}
+    mission = make_mission().model_copy(update={"mission_id": "flown-by-script"})
+    assert client.post("/api/missions", json=mission.model_dump(), headers=AUTH).json()["accepted"]
+    active = client.get("/api/missions/active").json()["mission"]
+    assert active["mission_id"] == "flown-by-script"
+    assert len(active["waypoints"]) == len(mission.waypoints)

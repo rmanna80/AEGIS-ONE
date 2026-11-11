@@ -502,6 +502,13 @@ def create_app(
     async def current_mission() -> MissionStatus:
         return hub.mission
 
+    @app.get("/api/missions/active")
+    async def active_mission() -> dict[str, Any]:
+        """The mission last accepted by the vehicle (whoever submitted it), so every
+        display can draw the route actually being flown."""
+        mission = hub.active_mission
+        return {"mission": mission.model_dump(mode="json") if mission is not None else None}
+
     # ---------------------------------------------------------- operator commands
 
     @app.post("/api/missions", response_model=MissionResult)
