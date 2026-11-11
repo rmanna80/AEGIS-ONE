@@ -134,6 +134,12 @@ def create_app(
     hub = hub or build_hub(settings, record_dir)
     token = settings.operator_token or secrets.token_urlsafe(24)
     scenario = _load_scenario(settings.resolved_scenario_file())
+    if not settings.detector_labels and scenario.get("detector_labels"):
+        # A scenario may narrow the detector to the classes that matter in it; an
+        # explicit AEGIS_DETECTOR_LABELS still wins.
+        settings = settings.model_copy(
+            update={"detector_labels": list(scenario["detector_labels"])}
+        )
     perception_off_reason = ""
     if perception is None:
         perception, perception_off_reason = build_perception(settings, hub, record_dir)

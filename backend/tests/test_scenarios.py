@@ -115,3 +115,12 @@ def test_urban_scenario_stages_people_and_vehicles_in_view_of_the_route() -> Non
     for prop in scenario["props"]:
         for obstacle in scenario["obstacles"]:
             assert distance_to_footprint((prop["east_m"], prop["north_m"]), obstacle) > 0.5
+
+
+def test_scenario_detector_labels_are_classes_the_default_model_knows() -> None:
+    coco = {"person", "bicycle", "car", "motorcycle", "airplane", "bus", "train", "truck"}
+    scenario = load(REPO_ROOT / "simulation" / "scenarios" / "urban.json")
+    labels = set(scenario["detector_labels"])
+    assert labels <= coco and "airplane" not in labels
+    for prop in scenario["props"]:  # every staged target stays detectable after filtering
+        assert set(prop["expected_labels"]) & labels

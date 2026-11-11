@@ -100,6 +100,15 @@ built-in simulator and a streamed video file. It correctly refused to run withou
 `--rehearsal` (camera not `simulated`), and correctly failed criteria 2 and 3 (no vehicles in
 the clip). That exercises the script's logic only; it is not a Demo 2 result.
 
+**Demo 2 against Gazebo (run by the project owner, 2026-11-10)**: the urban world loaded, the
+Fuel models downloaded, and criteria 2 to 4 passed: simulated camera continuous, `person`
+(best confidence 0.90), `car` (0.91) and `truck` (0.81) tracked on Gazebo-rendered imagery,
+detections stored. Criteria 1 and 5 failed: the flight was ended by an operator Land command
+during the return leg, and a critical alert was raised (cause not yet identified). The detector
+also produced 64 spurious `airplane` tracks at up to 0.90 confidence plus a few other false
+classes; the urban scenario now restricts the detector to people and road vehicles. Demo 2 has
+therefore **not passed yet**.
+
 **Urban scenario**: the mission (three waypoints at 4 m, then return) was flown on the built-in
 simulator, which has no buildings to hit. Route clearance from every obstacle is asserted by
 `test_scenarios.py`.
@@ -108,10 +117,7 @@ simulator, which has no buildings to hit. Route clearance from every obstacle is
 
 - Anything under Gazebo by me (not installable on the bootstrap machine). The project owner
   reports the Gazebo launch works on WSL2.
-- The urban Gazebo world (`aegis_urban.sdf`): never launched. Its people and vehicle models are
-  fetched from Gazebo Fuel by name; the names come from the standard Gazebo model set but the
-  download itself has not been exercised.
-- Demo 2 against Gazebo.
+- A passing Demo 2 run (see above).
 - Detection on Gazebo-rendered imagery (rendered people and vehicles may detect poorly).
 - ROS 2, and every Phase 3+ capability.
 - PX4 geofence breach behaviour, wind, in-simulator sensor faults.

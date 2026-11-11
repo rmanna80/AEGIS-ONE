@@ -238,6 +238,14 @@
       ]
     }
   ],
+  "detector_labels": [
+    "person",
+    "bicycle",
+    "car",
+    "motorcycle",
+    "bus",
+    "truck"
+  ],
   "demo_mission": {
     "mission_id": "demo2-street",
     "name": "Demo 2 - Low pass along the training street",

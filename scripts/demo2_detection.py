@@ -113,6 +113,7 @@ def main() -> int:
     seen: dict[str, dict[str, Any]] = {}  # label -> {"track_ids": set, "best_confidence": float}
     camera_provenances: set[str] = set()
     critical: set[str] = set()
+    critical_details: list[str] = []
     camera_lost = False
     polls = 0
     last_line = ""
@@ -123,7 +124,16 @@ def main() -> int:
             snap = call(args.api, "/api/state")
             status = snap["mission"]
             codes = {a["code"] for a in snap["alerts"]}
-            critical |= {a["code"] for a in snap["alerts"] if a["severity"] == "critical"}
+            for alert in snap["alerts"]:
+                if alert["severity"] == "critical" and alert["code"] not in critical:
+                    critical.add(alert["code"])
+                    critical_details.append(
+                        f"{alert['code']} at {time.monotonic() - started:.1f}s "
+                        f"({status['phase']}): {alert['message']}"
+                    )
+                    print(
+                        f"[{time.monotonic() - started:6.1f}s] CRITICAL ALERT {critical_details[-1]}"
+                    )
             camera_lost |= "camera.no_frames" in codes
             latest = call(args.api, "/api/perception/latest")["result"]
             if latest:
@@ -195,7 +205,7 @@ def main() -> int:
         "perception_polls": polls,
         "session": session,
         "stored_detection_frames": stored,
-        "critical_alerts": sorted(critical),
+        "critical_alerts": critical_details,
         "final_mission_status": status,
     }
     out_dir = REPO_ROOT / "data" / "generated" / "demo_results"
@@ -205,6 +215,12 @@ def main() -> int:
 
     for name, ok in criteria.items():
         print(f"  {'PASS' if ok else 'FAIL'}  {name}")
+    if status["phase"] == "cancelled":
+        print(
+            f"  note: the mission was interrupted ({status['message']}), so criterion 1 cannot pass"
+        )
+    for detail in critical_details:
+        print(f"  critical alert: {detail}")
     for kind, labels in found_kinds.items():
         want = " or ".join(sorted(expected[kind]))
         print(f"  {kind}: expected {want}; matched {labels or 'nothing'}")
