@@ -731,7 +731,12 @@ class PX4SITLAdapter:
             ):
                 self._set_status(MissionPhase.COMPLETED, "Landed at home and disarmed.")
 
-    async def _intervene(self, action: Callable[[], Awaitable[None]], message: str) -> None:
+    async def _intervene(
+        self,
+        action: Callable[[], Awaitable[None]],
+        message: str,
+        phase: MissionPhase = MissionPhase.CANCELLED,
+    ) -> None:
         self._require_attested()
         await self._await_heartbeat(timeout_s=10.0)
         await action()
@@ -739,12 +744,16 @@ class PX4SITLAdapter:
             MissionPhase.ACTIVE,
             MissionPhase.RETURNING,
             MissionPhase.STALLED,
+            MissionPhase.BLOCKED,
             MissionPhase.UPLOADING,
         ):
-            self._set_status(MissionPhase.CANCELLED, message)
+            self._set_status(phase, message)
 
-    async def hold(self) -> None:
-        await self._intervene(self._system.action.hold, "Operator commanded hold.")
+    async def hold(self, reason: str | None = None) -> None:
+        if reason is None:
+            await self._intervene(self._system.action.hold, "Operator commanded hold.")
+        else:
+            await self._intervene(self._system.action.hold, reason, MissionPhase.BLOCKED)
 
     async def return_to_home(self) -> None:
         await self._intervene(

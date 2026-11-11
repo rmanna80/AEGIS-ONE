@@ -8,7 +8,7 @@ are a record of what was observed, not a guarantee.
 
 | Suite | Command | Result |
 | --- | --- | --- |
-| Backend unit + API + perception | `pytest` | 118 passed, 3 skipped (2 SITL tests, 1 needing the COCO8 images) |
+| Backend unit + API + perception + navigation | `pytest` | 145 passed, 3 skipped (2 SITL tests, 1 needing the COCO8 images) |
 | Lint | `ruff check . && ruff format --check .` | clean |
 | Types | `mypy` (strict) | no issues in 12 source files |
 | Frontend unit | `cd frontend && npm test` | 9 passed |
@@ -127,11 +127,51 @@ in that state crashed the MAVSDK server process. Fixes, all verified at 0.3x:
 simulator, which has no buildings to hit. Route clearance from every obstacle is asserted by
 `test_scenarios.py`.
 
+## Navigation and mapping results (Phase 3, measured 2026-11-11)
+
+All with PX4 v1.17.0 SITL on the built-in simulator and the software depth sensor (96 x 72 px,
+73 deg, 19 m range, 1% range noise, 5 Hz). Ground truth is the scenario's own geometry.
+
+**Demo 4, mapping (urban street, one pass at 6 m):** 5 of 5 criteria.
+
+| Metric | Value |
+| --- | --- |
+| Depth frames fused | 552 |
+| Occupied voxels (0.5 m) | 3,365 |
+| Precision (within one voxel of real geometry) | 0.992 |
+| Recall of the obstacle surface that was observed | 0.932 |
+| Surface coverage | 0.120: one pass down a street only sees the faces that front it |
+
+**Obstacle detection and replanning (open field, tower unknown to the route checker):** 6 of 6
+criteria. The mission was accepted, the tower was mapped in flight, Hold was commanded with the
+conflict 14 m ahead, and the vehicle stopped 11.7 m from the tower. A two-waypoint detour was
+planned, validated, flown, and the vehicle returned and landed. Clearance (3 m) was kept
+throughout.
+
+Two things these runs turned up and fixed:
+
+- A detour planned exactly along the clearance boundary was rejected seconds later, because the
+  hovering vehicle had mapped a little more of the tower. Detours are now planned with 1.5 m of
+  extra room.
+- The urban route at 4 m was stopped by the route monitor above the parked cars: with about
+  1 m of altitude-estimate noise the vehicle came within the clearance rules of a 1.9 m roof.
+  The pre-flight check had passed only by a rounding margin. The urban route now flies at 6 m.
+  **Demo 2 has not been re-run at 6 m.**
+
+**Unit tests** cover ray casting against boxes (including yawed) and cylinders, planar-depth
+rendering, body-to-ENU rotation, log-odds fusion and clearing of stale obstacles, the ground
+filter, save / load, A* (no corner cutting, no-route case), detour planning, return-leg
+checking, the automatic Hold (once per mission, off when disabled), proximity alerts, lost depth
+sensing, and the API paths (rejection before upload, planning, map endpoints, map reload).
+
 ## Not tested yet
 
 - Anything under Gazebo by me (not installable on the bootstrap machine). The project owner
   reports the Gazebo launch works on WSL2.
-- A passing Demo 2 run (see above).
+- Demo 2 at the urban route's new 6 m altitude (the owner reported a pass at 4 m).
+- The Gazebo depth camera path (`gazebo-depth`, `gz_camera_bridge.py --depth`): never run.
+- Mapping accuracy with Gazebo depth, where rendered models differ from the ground-truth boxes.
+- Mapping while the simulation runs well below real time.
 - Detection on Gazebo-rendered imagery (rendered people and vehicles may detect poorly).
 - ROS 2, and every Phase 3+ capability.
 - PX4 geofence breach behaviour, wind, in-simulator sensor faults.

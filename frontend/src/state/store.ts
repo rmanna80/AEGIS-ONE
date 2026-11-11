@@ -1,5 +1,12 @@
 import { create } from "zustand";
-import type { Mission, PerceptionStatus, Scenario, Snapshot, SystemInfo } from "../types";
+import type {
+  Mission,
+  NavigationStatus,
+  PerceptionStatus,
+  Scenario,
+  Snapshot,
+  SystemInfo,
+} from "../types";
 
 export type LinkStatus = "connecting" | "open" | "closed";
 export type CameraMode = "follow" | "orbit" | "fpv" | "top" | "free";
@@ -23,6 +30,12 @@ interface Store {
   system: SystemInfo | null;
   scenario: Scenario | null;
   perception: PerceptionStatus | null;
+  navigation: NavigationStatus | null;
+  /** Occupied voxel centres of the live map, flat [x, y, z, ...] in three.js coordinates. */
+  mapVoxels: Float32Array;
+  mapResolution: number;
+  mapRevision: number;
+  showMap: boolean;
   /** Mission being edited/previewed in the planner (starts as the scenario demo). */
   draft: Mission | null;
   history: HistoryPoint[];
@@ -38,6 +51,9 @@ interface Store {
   setSystem: (system: SystemInfo) => void;
   setScenario: (scenario: Scenario) => void;
   setPerception: (perception: PerceptionStatus) => void;
+  setNavigation: (navigation: NavigationStatus) => void;
+  setMap: (voxelsEnu: number[], resolution: number, revision: number) => void;
+  toggleMap: () => void;
   setDraft: (draft: Mission) => void;
   setCameraMode: (mode: CameraMode) => void;
   clearTrack: () => void;
@@ -49,6 +65,11 @@ export const useStore = create<Store>((set, get) => ({
   system: null,
   scenario: null,
   perception: null,
+  navigation: null,
+  mapVoxels: new Float32Array(0),
+  mapResolution: 0.5,
+  mapRevision: -1,
+  showMap: true,
   draft: null,
   history: [],
   track: [],
@@ -60,6 +81,18 @@ export const useStore = create<Store>((set, get) => ({
   setLink: (link) => set({ link }),
   setSystem: (system) => set({ system }),
   setPerception: (perception) => set({ perception }),
+  setNavigation: (navigation) => set({ navigation }),
+  toggleMap: () => set((s) => ({ showMap: !s.showMap })),
+  setMap: (voxelsEnu, mapResolution, mapRevision) => {
+    // ENU (east, north, up) -> three.js (x = east, y = up, z = -north)
+    const mapVoxels = new Float32Array(voxelsEnu.length);
+    for (let i = 0; i < voxelsEnu.length; i += 3) {
+      mapVoxels[i] = voxelsEnu[i]!;
+      mapVoxels[i + 1] = voxelsEnu[i + 2]!;
+      mapVoxels[i + 2] = -voxelsEnu[i + 1]!;
+    }
+    set({ mapVoxels, mapResolution, mapRevision });
+  },
   setScenario: (scenario) =>
     set((s) => ({ scenario, draft: s.draft ?? structuredClone(scenario.demo_mission) })),
   setDraft: (draft) => set({ draft }),

@@ -67,6 +67,25 @@ CameraSource --> InferenceBackend --> MultiObjectTracker --> PerceptionResult
 - Tracking output is image-space only (pixels, pixels per second). Selecting a track highlights
   it for the operator; no code path connects perception to vehicle commands.
 
+## Navigation (optional subsystem)
+
+```text
+DepthSource --> OccupancyGrid (3D log-odds, ENU) --> RouteChecker --> pre-flight validation
+ raycast          + prior map of known obstacles       A* planner      detour proposals
+ TCP stream         from the scenario file                              route monitor -> Hold
+```
+
+- `DepthSource` is a protocol; `RaycastDepthCamera` (software sensor against scenario geometry)
+  and `DepthStreamAdapter` (Gazebo depth via the bridge) implement it. A physical depth camera
+  would be a third implementation.
+- The same `SceneGeometry` provides the prior obstacle map, the simulated sensor and the ground
+  truth that maps are scored against.
+- Planning is 2D A* in the altitude band of each leg, on obstacles inflated by the clearance;
+  checking is 3D along each leg. PX4's take-off, return and landing paths are checked but not
+  re-routed.
+- The navigation service may request PX4 Hold; it has no other path to the vehicle. Detours
+  are returned to the operator as a draft mission.
+
 ## Data contracts
 
 `aegis/contracts.py` defines the Pydantic models that cross every boundary. Conventions:

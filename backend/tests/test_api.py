@@ -57,8 +57,12 @@ class FakeVehicle:
     async def mission_status(self) -> MissionStatus:
         return self.status
 
-    async def hold(self) -> None:
-        self.commands.append("hold")
+    async def hold(self, reason: str | None = None) -> None:
+        self.commands.append("hold" if reason is None else f"hold:{reason}")
+        if reason is not None:
+            self.status = self.status.model_copy(
+                update={"phase": MissionPhase.BLOCKED, "message": reason}
+            )
 
     async def return_to_home(self) -> None:
         self.commands.append("return_to_home")

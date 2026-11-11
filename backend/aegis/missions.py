@@ -59,6 +59,7 @@ class MissionPhase(StrEnum):
     COMPLETED = "completed"
     CANCELLED = "cancelled"  # operator intervened (hold / RTL / land)
     STALLED = "stalled"  # a waypoint was not reached within its leg timeout
+    BLOCKED = "blocked"  # AEGIS commanded Hold: route blocked or depth sensing lost
     FAILED = "failed"
     REJECTED = "rejected"  # failed validation or authorisation; nothing was sent
 

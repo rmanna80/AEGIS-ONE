@@ -6,23 +6,26 @@
 | --- | --- | --- |
 | 0 | Architecture and setup | Done |
 | 1 | Working 3D simulation, telemetry, waypoint mission, dashboard | Done (SIH verified; Gazebo launch confirmed by the owner) |
-| 2 | Perception: simulated RGB camera, detection, tracking, recording | Built. Gazebo camera link confirmed by the owner. Urban world and Demo 2 not yet run against Gazebo. |
-| 3 | Navigation and mapping: depth, occupancy, planning, wind | Not started |
+| 2 | Perception: simulated RGB camera, detection, tracking, recording | Done. Demo 2 reported passing on Gazebo by the owner (at 4 m; route since raised to 6 m). |
+| 3 | Navigation and mapping: depth, occupancy, planning, wind | Built and verified with the software depth sensor. Gazebo depth link unverified; wind and SLAM not built. |
 | 4 | Thermal and search and rescue | Not started |
 | 5 | Multi-drone simulation | Not started |
 | 6 | Cybersecurity and anomaly detection | Not started |
 | 7 | Raspberry Pi integration | Not started |
 | 8 | Physical hardware readiness (documentation and gating only) | Not started |
 
-## Next milestone: close Phase 2, start Phase 3
+## Next milestone: close Phase 3 on Gazebo, start Phase 4
 
-1. Run Demo 2 against Gazebo (`run_px4.sh gazebo-cam urban`). Fix Fuel model names if the
-   world fails to load; if YOLO does not recognise the rendered people or vehicles, try other
-   models or lower the confidence threshold, and record what was needed.
-2. Precision / recall on Gazebo-rendered imagery using the staged targets as ground truth
-   (needs projecting prop positions into the image with the camera model).
-3. Phase 3: depth camera (`gz_x500_depth`), occupancy mapping, obstacle-aware mission
-   validation and path planning, wind. Decide then whether to add ROS 2 for mapping libraries.
+1. Re-run Demo 2 at the urban route's 6 m altitude.
+2. Run the Gazebo depth path (`run_px4.sh gazebo-depth urban`, `AEGIS_DEPTH=stream`,
+   `gz_camera_bridge.py --depth`) and Demo 4 with it. Expect to adjust the pixel-format mapping,
+   field of view and range; expect lower accuracy than with the software sensor.
+3. Remaining Phase 3 items: wind (Gazebo wind plugin), a depth-image view in the dashboard,
+   pose estimation from sensors (SLAM / visual odometry; today the map uses PX4's pose), map
+   uncertainty display, Environment D (indoor, GNSS-denied). ROS 2 enters here if an
+   established SLAM package is adopted.
+4. Phase 4: simulated thermal sensor, heat-source segmentation, search-area coverage planning,
+   human-confirmation workflow, mission reports (Demo 3).
 
 ## Known defects and limitations
 
@@ -38,8 +41,13 @@
 - MAVSDK v4.0.5's server crashed when commanded while it considered the system timed out.
   Worked around (commands wait for a heartbeat; the server is restarted), not fixed upstream.
 - Replay has no pause or seek; speed and session are fixed at backend start.
-- Mission validation ignores obstacles. Shipped routes are checked for 5 m clearance by a test,
-  but a route edited in the dashboard is not; the urban street has buildings 6 m from the route.
+- Route checking treats unobserved space as free and needs the perception extra installed;
+  without it missions are checked against the geofence only.
+- The occupancy map uses PX4's pose estimate as given. There is no SLAM and no map-uncertainty
+  display; altitude noise of about 1 m smears thin horizontal surfaces.
+- One camera view at a time is not enforced: RGB and depth are separate vehicles in Gazebo
+  (`gazebo-cam` vs `gazebo-depth`), so Demo 2 and Gazebo-depth mapping cannot run together.
+- Maps are tied to a scenario and resolution; loading one made for another is refused.
 - Under RTL the vehicle climbs to PX4's return altitude (30 m) before flying home.
 - Session recordings are large: about 8 MB per minute of video plus about 4 MB per minute of
   detections. Nothing is rotated or deleted automatically.

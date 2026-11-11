@@ -77,6 +77,7 @@ export type MissionPhase =
   | "completed"
   | "cancelled"
   | "stalled"
+  | "blocked"
   | "failed"
   | "rejected";
 
@@ -249,4 +250,36 @@ export type PerceptionStatus =
       faults: string[];
       last_error: string | null;
       recording: string | null;
+    };
+
+// --- Navigation (mirrors backend/aegis/navigation/service.py)
+
+export type NavigationStatus =
+  | { enabled: false; reason: string }
+  | {
+      enabled: true;
+      depth_source: string | null;
+      depth_provenance: Provenance | null;
+      depth_age_s: number | null;
+      frames_integrated: number;
+      occupied_voxels: number;
+      map_revision: number;
+      resolution_m: number;
+      clearance_m: number;
+      uses_prior_map: boolean;
+      auto_hold: boolean;
+      nearest_obstacle_m: number | null;
+      last_error: string | null;
+    };
+
+export type MapPayload =
+  | { revision: number; changed: false }
+  | {
+      revision: number;
+      changed: true;
+      resolution_m: number;
+      occupied_voxels: number;
+      sent_voxels: number;
+      /** flat [east, north, up, ...] voxel centres in metres (ENU) */
+      voxels: number[];
     };

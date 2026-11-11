@@ -248,24 +248,24 @@
   ],
   "demo_mission": {
     "mission_id": "demo2-street",
-    "name": "Demo 2 - Low pass along the training street",
+    "name": "Demo 2 / Demo 4 - Low pass along the training street",
     "waypoints": [
       {
         "east_m": 0.0,
         "north_m": 8.0,
-        "altitude_rel_m": 4.0,
+        "altitude_rel_m": 6.0,
         "speed_m_s": 2.0
       },
       {
         "east_m": 0.0,
         "north_m": 30.0,
-        "altitude_rel_m": 4.0,
+        "altitude_rel_m": 6.0,
         "speed_m_s": 2.0
       },
       {
         "east_m": 0.0,
         "north_m": 54.0,
-        "altitude_rel_m": 4.0,
+        "altitude_rel_m": 6.0,
         "speed_m_s": 2.0
       }
     ],
@@ -291,7 +291,7 @@
         ],
         "max_altitude_rel_m": 40.0
       },
-      "min_altitude_rel_m": 3.0,
+      "min_altitude_rel_m": 4.0,
       "cruise_speed_m_s": 2.0,
       "max_leg_length_m": 200.0,
       "leg_timeout_s": 120.0,

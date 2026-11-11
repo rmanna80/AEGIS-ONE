@@ -15,6 +15,8 @@ export default function App() {
   const setSystem = useStore((s) => s.setSystem);
   const setScenario = useStore((s) => s.setScenario);
   const setPerception = useStore((s) => s.setPerception);
+  const setNavigation = useStore((s) => s.setNavigation);
+  const setMap = useStore((s) => s.setMap);
   const perceptionEnabled = useStore((s) => Boolean(s.perception?.enabled));
 
   useEffect(() => {
@@ -36,17 +38,33 @@ export default function App() {
         .then((status) => !cancelled && setPerception(status))
         .catch(() => undefined);
     loadScenario();
+    const loadNavigation = () =>
+      api
+        .navigation()
+        .then((status) => {
+          if (cancelled) return;
+          setNavigation(status);
+          // Fetch the occupancy map only when it has changed since the last copy.
+          if (status.enabled && status.map_revision !== useStore.getState().mapRevision) {
+            return api.map(useStore.getState().mapRevision).then((map) => {
+              if (!cancelled && map.changed) setMap(map.voxels, map.resolution_m, map.revision);
+            });
+          }
+        })
+        .catch(() => undefined);
     loadSystem();
     loadPerception();
+    loadNavigation();
     const timer = window.setInterval(() => {
       loadSystem();
       loadPerception();
+      loadNavigation();
     }, 2000);
     return () => {
       cancelled = true;
       window.clearInterval(timer);
     };
-  }, [setScenario, setSystem, setPerception]);
+  }, [setScenario, setSystem, setPerception, setNavigation, setMap]);
 
   return (
     <div className="flex h-full min-w-[1100px] flex-col">

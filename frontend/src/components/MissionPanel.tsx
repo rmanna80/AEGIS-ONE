@@ -11,6 +11,7 @@ const PHASE_TONE: Partial<Record<MissionPhase, string>> = {
   completed: "text-ok",
   cancelled: "text-warn",
   stalled: "text-crit",
+  blocked: "text-crit",
   failed: "text-crit",
   rejected: "text-crit",
 };
@@ -36,6 +37,8 @@ export function MissionPanel() {
   const [confirming, setConfirming] = useState(false);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [planNote, setPlanNote] = useState<string | null>(null);
+  const navigationOn = useStore((s) => Boolean(s.navigation?.enabled));
 
   // Live validation of the draft against the backend's rules (debounced).
   useEffect(() => {
@@ -107,6 +110,22 @@ export function MissionPanel() {
       if (!result.accepted) {
         throw new Error([result.status.message, ...result.status.issues].join(" "));
       }
+    });
+
+  // Ask the backend for detour waypoints around known and mapped obstacles. The result
+  // only replaces the draft: the operator still reviews it and starts it explicitly.
+  const planDetour = () =>
+    run(async () => {
+      setPlanNote(null);
+      const sameMission = status?.mission_id === draft.mission_id;
+      const reached = sameMission && phase === "blocked" ? status.current_waypoint : 0;
+      const result = await api.plan(draft, reached);
+      setDraft(result.mission);
+      setPlanNote(
+        result.detour_waypoints_added > 0
+          ? `Detour planned: ${result.detour_waypoints_added} waypoint(s) added. Review the route, then start it.`
+          : "The route is already clear of obstacles.",
+      );
     });
 
   const updateWaypoint = (index: number, patch: Partial<Waypoint>) => {
@@ -195,6 +214,16 @@ export function MissionPanel() {
         <button onClick={resetDraft} disabled={busy} className="text-dim hover:text-text disabled:opacity-40">
           Reset to demo
         </button>
+        {navigationOn && (
+          <button
+            onClick={planDetour}
+            disabled={busy || pending}
+            title="Insert detour waypoints around known and mapped obstacles"
+            className="text-ok hover:underline disabled:opacity-40"
+          >
+            Plan around obstacles
+          </button>
+        )}
       </div>
       <div className="num mt-1 text-[10px] text-dim">
         Geofence ceiling {fence.max_altitude_rel_m} m · cruise {draft.constraints.cruise_speed_m_s} m/s ·
@@ -208,7 +237,10 @@ export function MissionPanel() {
         role="status"
       >
         {issues === null && "Validating…"}
-        {valid && "Pre-flight validation passed: all waypoints and legs are inside the geofence."}
+        {valid &&
+          (navigationOn
+            ? "Pre-flight validation passed: inside the geofence and clear of obstacles."
+            : "Pre-flight validation passed: all waypoints and legs are inside the geofence.")}
         {issues !== null && !valid && (
           <ul className="list-inside list-disc">
             {issues.map((issue) => (
@@ -217,6 +249,18 @@ export function MissionPanel() {
           </ul>
         )}
       </div>
+
+      {planNote && (
+        <p className="mt-2 rounded-sm border border-ok/50 px-2.5 py-1.5 text-[11px] text-ok" role="status">
+          {planNote}
+        </p>
+      )}
+      {phase === "blocked" && (
+        <p className="mt-2 rounded-sm border border-crit/60 px-2.5 py-1.5 text-[11px] text-crit" role="alert">
+          AEGIS put the vehicle in Hold. It will stay there until you act: plan a detour and start
+          it, or use Return / Land.
+        </p>
+      )}
 
       <div className="mt-3 border-t border-line pt-3">
         <div className="mb-2 flex items-center gap-2">

@@ -41,8 +41,9 @@ class MissionExecutor(Protocol):
 
     async def mission_status(self) -> MissionStatus: ...
 
-    async def hold(self) -> None:
-        """Operator cancel: stop and hover in place."""
+    async def hold(self, reason: str | None = None) -> None:
+        """Stop and hover in place. ``reason`` is given when AEGIS, not the operator,
+        asked for the hold (e.g. the route ahead is blocked)."""
         ...
 
     async def return_to_home(self) -> None: ...

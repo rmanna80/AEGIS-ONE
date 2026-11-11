@@ -3,31 +3,158 @@
   "name": "Environment A - Open test field",
   "gazebo_world": "aegis_open_field",
   "frame": "ENU metres; origin = vehicle home at the centre of the landing pad; Gazebo world x=east, y=north, z=up",
-  "ground": { "size_m": 300.0 },
-  "landing_pad": { "east_m": 0.0, "north_m": 0.0, "radius_m": 1.5 },
+  "ground": {
+    "size_m": 300.0
+  },
+  "landing_pad": {
+    "east_m": 0.0,
+    "north_m": 0.0,
+    "radius_m": 1.5
+  },
   "obstacles": [
-    { "id": "container_1", "shape": "box", "east_m": 18.0, "north_m": 8.0, "size_enu_m": [6.0, 2.5, 2.6], "yaw_deg": 20.0, "color": "#3b6ea5" },
-    { "id": "wall_1", "shape": "box", "east_m": -15.0, "north_m": 40.0, "size_enu_m": [14.0, 0.4, 3.0], "yaw_deg": 0.0, "color": "#8a8f98" },
-    { "id": "tower_1", "shape": "cylinder", "east_m": 52.0, "north_m": -25.0, "radius_m": 1.2, "height_m": 10.0, "color": "#b5533c" },
-    { "id": "pole_1", "shape": "cylinder", "east_m": -45.0, "north_m": -12.0, "radius_m": 0.3, "height_m": 6.0, "color": "#c9a227" }
+    {
+      "id": "container_1",
+      "shape": "box",
+      "east_m": 18.0,
+      "north_m": 8.0,
+      "size_enu_m": [
+        6.0,
+        2.5,
+        2.6
+      ],
+      "yaw_deg": 20.0,
+      "color": "#3b6ea5"
+    },
+    {
+      "id": "wall_1",
+      "shape": "box",
+      "east_m": -15.0,
+      "north_m": 40.0,
+      "size_enu_m": [
+        14.0,
+        0.4,
+        3.0
+      ],
+      "yaw_deg": 0.0,
+      "color": "#8a8f98"
+    },
+    {
+      "id": "tower_1",
+      "shape": "cylinder",
+      "east_m": 52.0,
+      "north_m": -25.0,
+      "radius_m": 1.2,
+      "height_m": 10.0,
+      "color": "#b5533c"
+    },
+    {
+      "id": "pole_1",
+      "shape": "cylinder",
+      "east_m": -45.0,
+      "north_m": -12.0,
+      "radius_m": 0.3,
+      "height_m": 6.0,
+      "color": "#c9a227"
+    }
   ],
   "demo_mission": {
     "mission_id": "demo1-survey",
     "name": "Demo 1 - Autonomous survey of the open field",
     "waypoints": [
-      { "east_m": 0.0, "north_m": 25.0, "altitude_rel_m": 12.0 },
-      { "east_m": 35.0, "north_m": 25.0, "altitude_rel_m": 15.0 },
-      { "east_m": 35.0, "north_m": -30.0, "altitude_rel_m": 15.0 },
-      { "east_m": -30.0, "north_m": -30.0, "altitude_rel_m": 12.0 },
-      { "east_m": -30.0, "north_m": 10.0, "altitude_rel_m": 10.0 }
+      {
+        "east_m": 0.0,
+        "north_m": 25.0,
+        "altitude_rel_m": 12.0
+      },
+      {
+        "east_m": 35.0,
+        "north_m": 25.0,
+        "altitude_rel_m": 15.0
+      },
+      {
+        "east_m": 35.0,
+        "north_m": -30.0,
+        "altitude_rel_m": 15.0
+      },
+      {
+        "east_m": -30.0,
+        "north_m": -30.0,
+        "altitude_rel_m": 12.0
+      },
+      {
+        "east_m": -30.0,
+        "north_m": 10.0,
+        "altitude_rel_m": 10.0
+      }
     ],
     "constraints": {
       "geofence": {
-        "polygon_enu_m": [[-80.0, -80.0], [80.0, -80.0], [80.0, 80.0], [-80.0, 80.0]],
+        "polygon_enu_m": [
+          [
+            -80.0,
+            -80.0
+          ],
+          [
+            80.0,
+            -80.0
+          ],
+          [
+            80.0,
+            80.0
+          ],
+          [
+            -80.0,
+            80.0
+          ]
+        ],
         "max_altitude_rel_m": 40.0
       },
       "min_altitude_rel_m": 5.0,
       "cruise_speed_m_s": 5.0,
+      "max_leg_length_m": 200.0,
+      "leg_timeout_s": 120.0,
+      "return_to_home_on_complete": true
+    }
+  },
+  "replan_mission": {
+    "mission_id": "demo-replan",
+    "name": "Obstacle on the route: detect, hold, replan",
+    "waypoints": [
+      {
+        "east_m": 30.0,
+        "north_m": -25.0,
+        "altitude_rel_m": 6.0
+      },
+      {
+        "east_m": 70.0,
+        "north_m": -25.0,
+        "altitude_rel_m": 6.0
+      }
+    ],
+    "constraints": {
+      "geofence": {
+        "polygon_enu_m": [
+          [
+            -80.0,
+            -80.0
+          ],
+          [
+            80.0,
+            -80.0
+          ],
+          [
+            80.0,
+            80.0
+          ],
+          [
+            -80.0,
+            80.0
+          ]
+        ],
+        "max_altitude_rel_m": 40.0
+      },
+      "min_altitude_rel_m": 5.0,
+      "cruise_speed_m_s": 4.0,
       "max_leg_length_m": 200.0,
       "leg_timeout_s": 120.0,
       "return_to_home_on_complete": true

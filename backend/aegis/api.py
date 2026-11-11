@@ -30,10 +30,17 @@ from aegis.config import OperatingMode, Settings
 from aegis.contracts import Alert, Severity
 from aegis.hub import TelemetryHub
 from aegis.interfaces import MissionExecutor, VehicleTelemetrySource
-from aegis.missions import Mission, MissionResult, MissionStatus, validate_mission
+from aegis.missions import (
+    Mission,
+    MissionPhase,
+    MissionResult,
+    MissionStatus,
+    validate_mission,
+)
 from aegis.recording import FlightRecorder, RecordedTelemetryAdapter
 
 if TYPE_CHECKING:
+    from aegis.navigation.service import NavigationService
     from aegis.perception.pipeline import PerceptionPipeline
     from aegis.perception.playback import RecordedPerceptionPlayer
 
@@ -44,6 +51,64 @@ log = logging.getLogger("aegis.api")
 
 class TrackSelection(BaseModel):
     track_id: int | None
+
+
+class PlanRequest(BaseModel):
+    mission: Mission
+    # Number of waypoints already reached; they are dropped from the planned mission.
+    from_waypoint: int = 0
+
+
+def build_navigation(
+    settings: Settings, hub: TelemetryHub, scenario: dict[str, Any], record_dir: Path | None
+) -> tuple[NavigationService | None, str]:
+    """Create the navigation service, or explain why it is off. Never raises."""
+    try:
+        from aegis.navigation.depth import DepthSource, RaycastDepthCamera
+        from aegis.navigation.depth_stream import DepthStreamAdapter
+        from aegis.navigation.geometry import SceneGeometry
+        from aegis.navigation.service import NavigationService
+    except ImportError as exc:
+        return None, f"Navigation dependencies are not installed ({exc.name}); see README."
+    try:
+        depth: DepthSource | None = None
+        live = settings.mode is not OperatingMode.REPLAY
+        if settings.depth == "raycast" and live:
+            depth = RaycastDepthCamera(
+                SceneGeometry(scenario),
+                hub.source.get_state,
+                horizontal_fov_deg=settings.depth_hfov_deg,
+                max_range_m=settings.depth_max_range_m,
+            )
+        elif settings.depth == "stream" and live:
+            depth = DepthStreamAdapter(
+                settings.camera_stream_host,
+                settings.depth_stream_port,
+                settings.depth_hfov_deg,
+                settings.depth_max_range_m,
+            )
+        elif settings.depth not in ("none", "raycast", "stream"):
+            return None, f"Unknown AEGIS_DEPTH value {settings.depth!r}."
+        service = NavigationService(
+            hub,
+            scenario,
+            depth,
+            resolution_m=settings.map_resolution_m,
+            clearance_m=settings.nav_clearance_m,
+            use_prior_map=settings.nav_use_prior_map,
+            auto_hold=settings.nav_auto_hold,
+            save_dir=record_dir,
+        )
+        saved = settings.nav_load_map
+        if saved is None and not live:
+            session = settings.resolved_replay_session()
+            if session is not None and (session / "map.npz").is_file():
+                saved = session / "map.npz"
+        if saved is not None:
+            service.load_map(saved)
+        return service, ""
+    except (OSError, ValueError, RuntimeError, KeyError) as exc:
+        return None, str(exc)
 
 
 def build_perception(
@@ -123,6 +188,7 @@ def create_app(
     settings: Settings | None = None,
     hub: TelemetryHub | None = None,
     perception: Perception | None = None,
+    navigation: NavigationService | None = None,
 ) -> FastAPI:
     settings = settings or Settings()
     logging.basicConfig(
@@ -143,8 +209,14 @@ def create_app(
             update={"detector_labels": list(scenario["detector_labels"])}
         )
     perception_off_reason = ""
+    perception_check: Any = None
     if perception is None:
         perception, perception_off_reason = build_perception(settings, hub, record_dir)
+    navigation_off_reason = ""
+    if navigation is None:
+        navigation, navigation_off_reason = build_navigation(settings, hub, scenario, record_dir)
+    if navigation is not None:
+        hub.extra_checks.append(navigation.findings)
     if perception is not None:
         pipeline = perception
 
@@ -158,13 +230,14 @@ def create_app(
             ]
 
         hub.extra_checks.append(perception_findings)
+        perception_check = perception_findings
 
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
         log.info("AEGIS ONE %s starting in %s mode", __version__, settings.mode.value)
         if hub.executor is not None and settings.operator_token is None:
             log.warning("AEGIS_OPERATOR_TOKEN not set; generated for this run: %s", token)
-        nonlocal perception, perception_off_reason
+        nonlocal perception, perception_off_reason, navigation, navigation_off_reason
         await hub.start()
         try:
             if perception is not None:
@@ -185,14 +258,27 @@ def create_app(
                             f"(port {settings.camera_stream_port})"
                         )
                     log.error(perception_off_reason)
-                    hub.extra_checks.clear()
+                    hub.extra_checks[:] = [c for c in hub.extra_checks if c is not perception_check]
                     perception = None
             if perception is None:
                 log.info("Perception disabled: %s", perception_off_reason)
+            if navigation is not None:
+                try:
+                    await navigation.start()
+                    log.info("Navigation enabled: depth=%s", settings.depth)
+                except OSError as exc:
+                    navigation_off_reason = f"Depth source could not start: {exc}"
+                    log.error(navigation_off_reason)
+                    hub.extra_checks.remove(navigation.findings)
+                    navigation = None
+            else:
+                log.info("Navigation disabled: %s", navigation_off_reason)
             yield
         finally:
             # Always runs, including when startup fails part-way, so the MAVSDK
             # server child process is never left behind.
+            if navigation is not None:
+                await navigation.stop()
             if perception is not None:
                 await perception.stop()
             await hub.stop()
@@ -289,13 +375,55 @@ def create_app(
             found.append({"sample": settings.replay_file.name, "has_camera": False})
         return found
 
+    def vehicle_start() -> tuple[float, float, float]:
+        if hub.state and hub.state.position_enu_m:
+            p = hub.state.position_enu_m
+            return (p.x, p.y, max(p.z, 0.0))
+        return (0.0, 0.0, 0.0)
+
+    async def mission_issues(mission: Mission) -> list[str]:
+        """Geofence / altitude rules plus, when navigation is on, obstacle clearance."""
+        start = vehicle_start()
+        issues = validate_mission(mission, start_enu_m=start[:2])
+        if navigation is not None and not issues:
+            issues += await asyncio.to_thread(navigation.checker.check_mission, mission, start)
+        return issues
+
     @app.post("/api/missions/validate")
     async def validate(mission: Mission) -> dict[str, Any]:
-        start = (0.0, 0.0)
-        if hub.state and hub.state.position_enu_m:
-            start = (hub.state.position_enu_m.x, hub.state.position_enu_m.y)
-        issues = validate_mission(mission, start_enu_m=start)
-        return {"valid": not issues, "issues": issues}
+        issues = await mission_issues(mission)
+        return {
+            "valid": not issues,
+            "issues": issues,
+            "obstacles_checked": navigation is not None,
+        }
+
+    @app.post("/api/missions/plan")
+    async def plan(request: PlanRequest) -> dict[str, Any]:
+        """Propose detour waypoints around known and mapped obstacles. Nothing is sent
+        to the vehicle: the operator reviews the result and submits it like any mission."""
+        if navigation is None:
+            raise HTTPException(409, f"Navigation is not enabled. {navigation_off_reason}")
+        from aegis.navigation.planner import PlanningError
+
+        remaining = request.mission.waypoints[max(0, request.from_waypoint) :]
+        if not remaining:
+            raise HTTPException(422, "No waypoints left to plan.")
+        mission = request.mission.model_copy(update={"waypoints": remaining})
+        try:
+            planned = await asyncio.to_thread(
+                navigation.checker.plan_mission, mission, vehicle_start()
+            )
+        except PlanningError as exc:
+            raise HTTPException(422, str(exc)) from exc
+        added = len(planned.waypoints) - len(mission.waypoints)
+        if request.from_waypoint > 0 or added > 0:
+            planned = planned.model_copy(
+                update={
+                    "mission_id": f"{request.mission.mission_id.removesuffix('-replan')}-replan"
+                }
+            )
+        return {"mission": planned.model_dump(mode="json"), "detour_waypoints_added": added}
 
     @app.get("/api/missions/current", response_model=MissionStatus)
     async def current_mission() -> MissionStatus:
@@ -306,9 +434,28 @@ def create_app(
     @app.post("/api/missions", response_model=MissionResult)
     async def submit(mission: Mission, executor: MissionExecutor = operator) -> MissionResult:
         log.info("Operator submitted mission %s (%s)", mission.mission_id, mission.name)
+        if navigation is not None:
+            start = vehicle_start()
+            if not validate_mission(mission, start_enu_m=start[:2]):
+                blocked = await asyncio.to_thread(navigation.checker.check_mission, mission, start)
+                if blocked:  # refused here: nothing is sent to the vehicle
+                    log.warning("Mission %s rejected: %s", mission.mission_id, blocked)
+                    return MissionResult(
+                        accepted=False,
+                        status=MissionStatus(
+                            mission_id=mission.mission_id,
+                            name=mission.name,
+                            phase=MissionPhase.REJECTED,
+                            total_waypoints=len(mission.waypoints),
+                            message="Mission rejected: the route is not clear of obstacles.",
+                            issues=blocked,
+                            updated_at_unix_s=time.time(),
+                        ),
+                    )
         result = await executor.submit_mission(mission)
         if result.accepted:
             hub.geofence = mission.constraints.geofence
+            hub.active_mission = mission
         return result
 
     async def _intervene(name: str, executor: MissionExecutor) -> dict[str, str]:
@@ -347,6 +494,36 @@ def create_app(
             pass
         finally:
             hub.unsubscribe(queue)
+
+    # ---------------------------------------------------------------- navigation
+
+    @app.get("/api/navigation")
+    async def navigation_status() -> dict[str, Any]:
+        if navigation is None:
+            return {"enabled": False, "reason": navigation_off_reason}
+        return navigation.status()
+
+    @app.get("/api/map")
+    async def occupancy_map(since: int = -1) -> dict[str, Any]:
+        """Occupied voxels of the live map; ``since`` avoids resending an unchanged map."""
+        if navigation is None:
+            raise HTTPException(409, "Navigation is not enabled.")
+        return await asyncio.to_thread(navigation.map_payload, since)
+
+    @app.get("/api/map/accuracy")
+    async def map_accuracy() -> dict[str, Any]:
+        """Reconstructed map scored against the scenario's ground-truth geometry."""
+        if navigation is None:
+            raise HTTPException(409, "Navigation is not enabled.")
+        return await asyncio.to_thread(navigation.accuracy)
+
+    @app.post("/api/map/save")
+    async def save_map() -> dict[str, Any]:
+        if navigation is None:
+            raise HTTPException(409, "Navigation is not enabled.")
+        folder = record_dir or settings.data_dir / "maps"
+        path = await asyncio.to_thread(navigation.save_map, folder / "map.npz")
+        return {"saved": str(path), "load_with": f"AEGIS_NAV_LOAD_MAP={path}"}
 
     # ---------------------------------------------------------------- perception
 

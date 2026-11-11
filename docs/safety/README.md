@@ -17,7 +17,8 @@ aircraft, and nothing here is evidence that one would be safe to fly.
 | The geofence is enforced by the autopilot | The fence polygon is uploaded to PX4; AEGIS only monitors it | `px4_sitl.py`, `safety.py` |
 | Do not trust acknowledgements | Mission start is confirmed by observing PX4's flight mode, with bounded retries | `px4_sitl.py` |
 | Unreachable waypoints do not hang forever | Per-leg timeout, then Hold and a `stalled` status | `px4_sitl._supervise_mission` |
-| Monitors advise, they do not act | Alerts for link loss, stale data, battery, GNSS, estimator and geofence | `safety.py` |
+| Monitors advise; the one automatic action is to stop | Alerts for link loss, stale data, battery, GNSS, estimator, geofence and obstacles. When the route ahead is blocked or depth sensing is lost during a mission, AEGIS requests PX4's Hold mode once and reports `blocked`. It never steers or resumes; the operator plans a detour or intervenes. Can be turned off with `AEGIS_NAV_AUTO_HOLD=false`. | `safety.py`, `navigation/service.py` |
+| Routes are checked against obstacles before upload | A mission passing within the clearance distance (3 m) of a known or mapped obstacle is refused and never sent | `navigation/planner.py`, `api.py` |
 
 ## Limits of these mechanisms
 
@@ -38,6 +39,27 @@ aircraft, and nothing here is evidence that one would be safe to fly.
   MAVSDK server process is restarted if it exits; while it is down AEGIS cannot see or command
   the vehicle, which stays under PX4's control. There is no watchdog on the backend itself.
 
+## Limits of obstacle avoidance
+
+AEGIS cannot guarantee collision avoidance, in simulation or anywhere else.
+
+- **Unobserved space is treated as free.** The planner is optimistic about what the depth sensor
+  has not seen; the route monitor only catches obstacles once they are mapped, within the
+  sensor's 19 m range and field of view. Something approached from outside the field of view
+  (from the side, above or below) is not seen.
+- **Stopping distance is not modelled.** Hold is commanded when a conflict is found within 30 m
+  of route ahead. At 4 m/s the live test stopped 11.7 m short; at higher speeds or with a
+  shorter-range sensor there may not be room.
+- **PX4's return path is fixed.** Return-to-home climbs to 30 m and flies straight home. That
+  leg is checked before take-off, but AEGIS cannot re-route it.
+- **Pose and depth are paired approximately.** Frames from a network depth source are fused with
+  the latest telemetry pose, ignoring transport latency, and the position estimate itself is
+  noisy (about 1 m in altitude in simulation). Clearance margins have to absorb both.
+- **Thin and moving objects.** 0.5 m voxels and a static-world assumption: wires, branches and
+  anything that moves are out of scope.
+- **The software depth sensor sees exactly the scenario's geometry.** It is a sensor model, not
+  a rendering; results with it are an upper bound on what a real or Gazebo depth camera gives.
+
 ## Fault-injection status (brief section 9)
 
 | Fault | Injected how | Result |
@@ -48,7 +70,11 @@ aircraft, and nothing here is evidence that one would be safe to fly.
 | GPS outage / degradation | Unit test | `gps.no_fix` critical, `gps.degraded` warning |
 | Invalid local position while airborne | Unit test | `estimator.position` critical |
 | Mission not started by PX4 | Occurred for real during development | detected, `stalled`, Hold commanded; start logic then hardened |
-| Camera disconnect, IMU anomalies, mapping failure, inference latency | Not applicable yet | Phases 2 to 6 |
+| Camera disconnect | Live (video sender stopped) | `camera.no_frames` warning |
+| Excessive inference latency | Unit test of the status path | `inference.slow` warning above 500 ms p95 |
+| Depth sensing lost during a mission (mapping failure) | Unit test | `depth.stale` critical, Hold commanded once |
+| Obstacle on the route | Live against PX4 SITL | `route.blocked` critical, Hold commanded, stopped 11.7 m short |
+| IMU anomalies | Not applicable yet | Phase 6 |
 
 ## Before any hardware is connected (Phase 8, not started)
 

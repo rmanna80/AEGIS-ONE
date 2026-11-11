@@ -1,4 +1,12 @@
-import type { Mission, MissionStatus, PerceptionStatus, Scenario, SystemInfo } from "./types";
+import type {
+  MapPayload,
+  Mission,
+  MissionStatus,
+  NavigationStatus,
+  PerceptionStatus,
+  Scenario,
+  SystemInfo,
+} from "./types";
 
 export class ApiError extends Error {
   constructor(
@@ -39,7 +47,17 @@ export const api = {
   system: () => request<SystemInfo>("/api/system"),
   scenario: () => request<Scenario>("/api/scenario"),
   validate: (mission: Mission) =>
-    post<{ valid: boolean; issues: string[] }>("/api/missions/validate", mission),
+    post<{ valid: boolean; issues: string[]; obstacles_checked: boolean }>(
+      "/api/missions/validate",
+      mission,
+    ),
+  plan: (mission: Mission, fromWaypoint: number) =>
+    post<{ mission: Mission; detour_waypoints_added: number }>("/api/missions/plan", {
+      mission,
+      from_waypoint: fromWaypoint,
+    }),
+  navigation: () => request<NavigationStatus>("/api/navigation"),
+  map: (since: number) => request<MapPayload>(`/api/map?since=${since}`),
   submit: (mission: Mission, token: string) =>
     post<{ accepted: boolean; status: MissionStatus }>("/api/missions", mission, token),
   perception: () => request<PerceptionStatus>("/api/perception"),

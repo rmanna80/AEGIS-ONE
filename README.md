@@ -5,12 +5,13 @@ telemetry/mission backend, and a 3D mission-control dashboard. Intended for auth
 non-weapon robotics research, environmental inspection and search and rescue, always with a
 human operator in control.
 
-**Status: Phases 0 and 1 complete; Phase 2 (perception) in progress.** A simulated PX4
-quadcopter flies a geofenced waypoint mission commanded from the dashboard, with live telemetry,
-alerts, flight recording and replay. Object detection and tracking run on video files and
-network camera streams; the Gazebo camera link is written but not yet run. Mapping, thermal,
-multi-drone, anomaly detection and security monitoring are later phases and are **not**
-implemented yet (see [docs/ROADMAP.md](docs/ROADMAP.md)).
+**Status: Phases 0 to 2 complete; Phase 3 (navigation and mapping) built and verified with a
+software depth sensor.** A simulated PX4 quadcopter flies geofenced, obstacle-checked waypoint
+missions commanded from the dashboard, with live telemetry, alerts, object detection and
+tracking, 3D occupancy mapping from depth, detour planning, and synchronized recording and
+replay. The Gazebo depth camera link is written but not yet run. Thermal, multi-drone, anomaly
+detection and security monitoring are later phases and are **not** implemented yet (see
+[docs/ROADMAP.md](docs/ROADMAP.md)).
 
 No drone hardware is needed. No physical-flight code path exists in this release.
 
@@ -38,6 +39,12 @@ No drone hardware is needed. No physical-flight code path exists in this release
 | Environment B (urban street with staged people and vehicles) | Dashboard and built-in simulator verified; **Gazebo world not yet launched** |
 | Demo 2 (AI detection) script | Logic rehearsed with a video file; **not yet run against Gazebo** |
 | Gazebo camera to AEGIS bridge (`scripts/gz_camera_bridge.py`) | Confirmed working by the project owner |
+| Depth sensing: software depth sensor (ray casting against the scenario) | Verified |
+| 3D occupancy mapping from depth, save / load, accuracy against ground truth | Verified (Demo 4: precision 0.99, recall 0.93 of observed surface) |
+| Obstacle-aware mission validation (known obstacles + live map) | Verified |
+| Route monitoring with automatic Hold, operator-approved detour planning (A*) | Verified live against PX4 SITL |
+| Gazebo depth camera link (`gazebo-depth` + `gz_camera_bridge.py --depth`) | **Written, not yet run** |
+| Wind disturbances, depth-image view in the dashboard | Not built |
 | ROS 2 Jazzy bridge, LiDAR, thermal | Not started |
 
 "Verified" means it was executed and observed; the commands and results are in
@@ -113,7 +120,7 @@ Measure the detector on your machine with `python scripts/eval_detector.py`.
 ## Demo 2: AI detection (urban scenario)
 
 A street with three standing people and three parked vehicles; the drone makes a slow pass at
-4 m and the detector has to find both kinds of target. Four terminals:
+6 m and the detector has to find both kinds of target. Four terminals:
 
 ```bash
 bash scripts/run_px4.sh gazebo-cam urban        # first launch downloads the models from Gazebo Fuel
@@ -127,6 +134,46 @@ one confirmed track per kind of staged target (person; car or truck); detections
 critical alerts. **This has not been run against Gazebo yet.** Two things may need adjusting on
 first run: the Fuel model names, and whether YOLO recognises Gazebo's rendered people and cars.
 The targets are static, the route is fixed, and nothing steers the drone toward a detection.
+
+## Navigation and mapping
+
+Route checking against the scenario's known obstacles is on whenever the perception extra is
+installed: a mission whose path comes within 3 m of an obstacle is refused before anything is
+sent to the vehicle, and **Plan around obstacles** in the Mission panel proposes detour
+waypoints for you to review.
+
+Add a depth sensor to build a live 3D map (teal and yellow cubes in the 3D view):
+
+```bash
+AEGIS_SCENARIO=urban AEGIS_DEPTH=raycast bash scripts/run_backend.sh
+```
+
+`raycast` is a software depth sensor that casts rays against the scenario's geometry from the
+vehicle's telemetry pose. It works with either simulator. With Gazebo's depth camera instead
+(**untested**):
+
+```bash
+bash scripts/run_px4.sh gazebo-depth urban
+AEGIS_SCENARIO=urban AEGIS_DEPTH=stream bash scripts/run_backend.sh
+/usr/bin/python3 scripts/gz_camera_bridge.py --depth
+```
+
+During a mission AEGIS watches the route ahead in the live map. If it is blocked, or depth
+sensing stops, AEGIS commands PX4's **Hold** and reports `blocked`. That is the only thing it
+does on its own: it never steers. You then plan a detour and start it, or use Return / Land.
+
+**Demo 4 (mapping)** flies the urban street, scores the map against ground truth and saves it:
+
+```bash
+python scripts/demo4_mapping.py --token "$AEGIS_OPERATOR_TOKEN"
+```
+
+**Obstacle detection and replanning** flies at a tower the route checker is not told about:
+
+```bash
+AEGIS_DEPTH=raycast AEGIS_NAV_USE_PRIOR_MAP=false bash scripts/run_backend.sh   # open_field
+python scripts/demo_obstacle_replan.py --token "$AEGIS_OPERATOR_TOKEN"
+```
 
 ## Replaying a session
 
@@ -187,6 +234,7 @@ backend/aegis/          Python package
   hub.py                sample -> monitor -> record -> broadcast loop
   api.py                FastAPI REST + WebSocket
   perception/           optional: cameras, ONNX detector, tracker, metrics, pipeline
+  navigation/           optional: depth sensing, occupancy map, route checker, A* planner
 backend/tests/          unit and API tests
 tests/simulation/       tests that need a live PX4 SITL
 frontend/               React + TypeScript + React Three Fiber dashboard
@@ -205,7 +253,8 @@ first real code lands, rather than created empty. The reasoning is in
 
 - AEGIS never commands actuators. It uses PX4's own mission, hold, return and land modes, so the
   flight controller's failsafes always remain in charge.
-- AEGIS monitors are advisory. They raise alerts; they do not override the autopilot.
+- AEGIS monitors raise alerts. The one automatic action is asking PX4 to Hold when the route
+  ahead is blocked or depth sensing is lost; resuming is always the operator's decision.
 - Commands are refused unless the autopilot reports a known simulation airframe.
 - Passing simulation tests is not evidence of flight readiness.
 

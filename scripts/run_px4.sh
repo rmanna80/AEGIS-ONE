@@ -4,6 +4,7 @@
 #   bash scripts/run_px4.sh sih      # PX4's built-in physics (no GPU, no Gazebo)
 #   bash scripts/run_px4.sh gazebo      # Gazebo Harmonic, AEGIS open-field world
 #   bash scripts/run_px4.sh gazebo-cam  # same, with a forward-facing RGB camera
+#   bash scripts/run_px4.sh gazebo-depth       # same, with a forward depth camera
 #   bash scripts/run_px4.sh gazebo-cam urban   # second argument picks the scenario
 #
 # Use the same scenario for the backend: AEGIS_SCENARIO=urban bash scripts/run_backend.sh
@@ -26,9 +27,10 @@ case "$SIM" in
     # -d: no interactive shell, so it also runs without a terminal.
     PX4_SIM_MODEL=sihsim_quadx exec ./bin/px4 -d
     ;;
-  gazebo|gazebo-cam)
+  gazebo|gazebo-cam|gazebo-depth)
     MODEL=gz_x500
     [ "$SIM" = "gazebo-cam" ] && MODEL=gz_x500_mono_cam
+    [ "$SIM" = "gazebo-depth" ] && MODEL=gz_x500_depth
     python3 "$REPO_ROOT/scripts/generate_gazebo_world.py" "$SCENARIO_FILE"
     WORLD="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["gazebo_world"])' "$SCENARIO_FILE")"
     cp "$REPO_ROOT/simulation/gazebo/worlds/$WORLD.sdf" "$PX4_DIR/Tools/simulation/gz/worlds/"
@@ -40,5 +42,5 @@ case "$SIM" in
     PX4_GZ_WORLD="$WORLD" exec make px4_sitl "$MODEL"
     ;;
   *)
-    echo "usage: $0 [sih|gazebo|gazebo-cam] [scenario]" >&2; exit 2 ;;
+    echo "usage: $0 [sih|gazebo|gazebo-cam|gazebo-depth] [scenario]" >&2; exit 2 ;;
 esac

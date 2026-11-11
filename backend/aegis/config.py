@@ -52,6 +52,22 @@ class Settings(BaseSettings):
     # does not starve the simulator (a starved simulator runs below real time).
     detector_threads: int = 0
 
+    # Navigation / mapping (optional). depth: "none", "raycast" (software depth
+    # sensor against the scenario's geometry; works on any simulator) or "stream"
+    # (Gazebo depth camera through scripts/gz_camera_bridge.py --depth).
+    depth: str = "none"
+    depth_stream_port: int = 5601
+    depth_hfov_deg: float = 73.0
+    depth_max_range_m: float = 19.0
+    map_resolution_m: float = 0.5
+    nav_clearance_m: float = 3.0
+    # Check routes against the scenario's known obstacles as well as the live map.
+    # Turn off to rely on sensing alone (e.g. to exercise detection and replanning).
+    nav_use_prior_map: bool = True
+    # Command PX4 Hold when the route ahead is blocked or depth sensing is lost.
+    nav_auto_hold: bool = True
+    nav_load_map: Path | None = None  # start from a previously saved map.npz
+
     broadcast_hz: float = 10.0
     cors_origins: list[str] = ["http://localhost:5173", "http://127.0.0.1:5173"]
 

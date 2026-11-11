@@ -12,7 +12,7 @@ from typing import Any
 
 from aegis.contracts import Alert, VehicleState
 from aegis.interfaces import MissionExecutor, VehicleTelemetrySource
-from aegis.missions import Geofence, MissionPhase, MissionStatus
+from aegis.missions import Geofence, Mission, MissionPhase, MissionStatus
 from aegis.recording import FlightRecorder
 from aegis.safety import AlertTracker, Finding, SafetyLimits, evaluate
 
@@ -37,6 +37,7 @@ class TelemetryHub:
         self.period_s = 1.0 / rate_hz
         self.alerts = AlertTracker()
         self.geofence: Geofence | None = None  # fence of the mission being flown
+        self.active_mission: Mission | None = None  # the mission last accepted by the vehicle
         # Additional advisory checks contributed by optional subsystems (perception...).
         self.extra_checks: list[Callable[[], list[Finding]]] = []
 
