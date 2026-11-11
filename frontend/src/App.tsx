@@ -33,7 +33,17 @@ export default function App() {
     const loadSystem = () =>
       api
         .system()
-        .then((system) => !cancelled && setSystem(system))
+        .then((system) => {
+          if (cancelled) return;
+          // The backend was restarted (possibly with another scenario or a rebuilt
+          // dashboard): start clean instead of mixing two runs on one page.
+          const seen = useStore.getState().system?.boot_id;
+          if (seen && system.boot_id && seen !== system.boot_id) {
+            window.location.reload();
+            return;
+          }
+          setSystem(system);
+        })
         .catch(() => undefined);
     const loadPerception = () =>
       api

@@ -226,3 +226,12 @@ def test_active_mission_is_readable_by_every_display(
     active = client.get("/api/missions/active").json()["mission"]
     assert active["mission_id"] == "flown-by-script"
     assert len(active["waypoints"]) == len(mission.waypoints)
+
+
+def test_system_reports_scenario_and_a_boot_id_that_changes_per_start(tmp_path: Path) -> None:
+    first, _, _ = make_client(tmp_path)
+    second, _, _ = make_client(tmp_path)
+    a, b = first.get("/api/system").json(), second.get("/api/system").json()
+    assert a["scenario_id"] == "open_field"
+    assert a["boot_id"] and a["boot_id"] != b["boot_id"]
+    assert first.get("/api/system").json()["boot_id"] == a["boot_id"]

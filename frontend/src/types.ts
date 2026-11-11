@@ -186,6 +186,8 @@ export interface SystemInfo {
   provenance: Provenance;
   source: string | null;
   commands_enabled: boolean;
+  boot_id?: string;
+  scenario_id?: string;
   simulator_attested?: boolean;
   attestation_error?: string | null;
   replay?: { file: string; duration_s: number; recorded_source: string };

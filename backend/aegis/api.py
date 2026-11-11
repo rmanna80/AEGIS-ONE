@@ -59,6 +59,17 @@ if TYPE_CHECKING:
 log = logging.getLogger("aegis.api")
 
 
+class _DashboardFiles(StaticFiles):
+    """Serves the built dashboard. The page itself is never cached, so a rebuilt
+    dashboard is picked up on the next load (its scripts have content-hashed names)."""
+
+    async def get_response(self, path: str, scope: Any) -> Response:
+        response = await super().get_response(path, scope)
+        if response.headers.get("content-type", "").startswith("text/html"):
+            response.headers["Cache-Control"] = "no-cache"
+        return response
+
+
 class TrackSelection(BaseModel):
     track_id: int | None
 
@@ -252,6 +263,7 @@ def create_app(
         record_dir = settings.data_dir / "sessions" / time.strftime("%Y%m%dT%H%M%S")
     hub = hub or build_hub(settings, record_dir)
     token = settings.operator_token or secrets.token_urlsafe(24)
+    boot_id = secrets.token_hex(8)
     scenario = _load_scenario(settings.resolved_scenario_file())
     if not settings.detector_labels and scenario.get("detector_labels"):
         # A scenario may narrow the detector to the classes that matter in it; an
@@ -400,6 +412,10 @@ def create_app(
             "source": getattr(source, "source", None),
             "commands_enabled": hub.executor is not None,
             "broadcast_hz": settings.broadcast_hz,
+            # Changes on every backend start. An open dashboard reloads when it sees a new
+            # one, so it never keeps showing the previous run's scenario or page.
+            "boot_id": boot_id,
+            "scenario_id": scenario.get("scenario_id"),
         }
         if isinstance(source, PX4SITLAdapter):
             info["simulator_attested"] = source.attested
@@ -736,7 +752,7 @@ def create_app(
             perception.unsubscribe(queue)
 
     if settings.frontend_dist.is_dir():
-        app.mount("/", StaticFiles(directory=settings.frontend_dist, html=True), name="ui")
+        app.mount("/", _DashboardFiles(directory=settings.frontend_dist, html=True), name="ui")
 
     return app
 
