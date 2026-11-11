@@ -9,26 +9,28 @@
 | 2 | Perception: simulated RGB camera, detection, tracking, recording | Done. Demo 2 reported passing on Gazebo by the owner (at 4 m; route since raised to 6 m). |
 | 3 | Navigation and mapping: depth, occupancy, planning, wind | Built and verified with the software depth sensor. Gazebo depth runs on the owner's machine but the map misses its accuracy targets (heading-estimate error). Wind and SLAM not built. |
 | 4 | Thermal and search and rescue | Built and verified live on PX4 SITL with a software thermal model (Demo 3: 8 of 8). No Gazebo-rendered thermal imagery; no thermal replay. |
-| 5 | Multi-drone simulation | Not started |
+| 5 | Multi-drone simulation | Built and verified live with two PX4 instances on the built-in simulator (Demo 5: 8 of 8). The automatic separation Hold is unit-tested only. No Gazebo fleet, no fleet replay; camera, mapping and the mission planner serve the first vehicle only. |
 | 6 | Cybersecurity and anomaly detection | Not started |
 | 7 | Raspberry Pi integration | Not started |
 | 8 | Physical hardware readiness (documentation and gating only) | Not started |
 
-## Next milestone: heading error, then Phase 5
+## Next milestone: heading error, then Phase 6
 
 1. Heading estimate under Gazebo. On the pad the autopilot reports about 95 deg where Gazebo has
    the model at 90 deg; the depth map lands about half a metre east and fails Demo 4. Record the
-   owner's Demo 4 numbers with the new true-pose scoring (not captured yet), find why PX4's
-   heading is off in the generated world, and re-run.
+   owner's Demo 4 numbers with the true-pose scoring (not captured yet), find why PX4's heading
+   is off in the generated world, and re-run.
 2. Find the process behind the slow memory decline (about 75 MB per 10 s) in Gazebo depth runs,
    and the fast one with stock 1080p cameras.
-3. Remaining Phase 3 items: wind (Gazebo wind plugin), a depth-image view in the dashboard,
-   pose estimation from sensors (SLAM / visual odometry), map uncertainty display,
-   Environment D (indoor, GNSS-denied).
-4. Remaining Phase 4 items: thermal imagery rendered by Gazebo (its thermal camera sensor),
-   pose error injected into the thermal model, terrain that is not flat, replay of thermal
-   sessions, coverage shown on the 3D view, a Gazebo run of Demo 3.
-5. Phase 5: multi-drone simulation.
+3. Remaining Phase 3 items: wind, a depth-image view, pose estimation from sensors, map
+   uncertainty display, Environment D (indoor, GNSS-denied).
+4. Remaining Phase 4 items: thermal imagery rendered by Gazebo, pose error injected into the
+   thermal model, non-flat terrain, thermal replay, a Gazebo run of Demo 3.
+5. Remaining Phase 5 items: a live test that provokes the separation Hold, timing-aware route
+   deconfliction (today any two legs that pass close are refused, whenever they are flown),
+   return legs included in the route check, other vehicles' planned routes on the 3D view,
+   a vehicle selector for the mission planner, fleets under Gazebo, fleet replay.
+6. Phase 6: cybersecurity monitoring and anomaly detection.
 
 ## Known defects and limitations
 

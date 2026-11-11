@@ -8,9 +8,9 @@ are a record of what was observed, not a guarantee.
 
 | Suite | Command | Result |
 | --- | --- | --- |
-| Backend unit + API + perception + navigation + search | `pytest` | 172 passed, 1 skipped here (the SITL tests are collected separately) |
+| Backend unit + API + perception + navigation + search + fleet | `pytest` | 188 passed, 1 skipped here (the SITL tests are collected separately) |
 | Lint | `ruff check . && ruff format --check .` | clean |
-| Types | `mypy` (strict) | no issues in 35 source files |
+| Types | `mypy` (strict) | no issues in 36 source files |
 | Frontend unit | `cd frontend && npm test` | 9 passed |
 | Frontend build | `cd frontend && npm run build` | type-checks and builds |
 | Live simulation | `AEGIS_SITL_TESTS=1 pytest tests/simulation -v` | 2 passed in 145 s |
@@ -229,7 +229,39 @@ geolocation from an offset and tilted view, candidate merging and review rules, 
 planning for wide, tall and triangular areas, coverage accounting, the API's token check, and
 that neither a detection nor a confirmation issues a vehicle command.
 
+## Fleet results (Phase 5, measured 2026-11-11)
+
+Two PX4 v1.17.0 instances on the built-in simulator (`scripts/run_fleet.sh 2 sar_field`), homes
+12.6 m apart, one backend with `AEGIS_FLEET_SIZE=2`, software thermal camera on each vehicle.
+
+**Demo 5:** 8 of 8 criteria.
+
+| Item | Result |
+| --- | --- |
+| Plans | sim-1: 3 passes at 25 m, 330 m. sim-2: 3 passes at 31 m, 374 m. No conflicts. |
+| Deliberate conflict (sim-1's route given to sim-2) | Refused before upload |
+| Missions | Both completed; each vehicle landed at its own home |
+| Search area seen | 100% (2,052 thermal frames from two cameras) |
+| Heat sources visible from above | 6 of 6, candidates first seen by both cameras |
+| Closest approach in the air | 7.8 m horizontally with 5.7 m of height: inside the warning distance, outside the Hold distance |
+| Automatic separation Holds | 0 |
+| First upload to last landing | 207 s (one vehicle alone: about 228 s) |
+
+Read these with care:
+
+- Two vehicles were barely faster than one here. The area is small, so transit, climb, return
+  and landing dominate; the search legs themselves took roughly half as long.
+- The automatic separation Hold never fired in a live flight. Its logic is covered by unit
+  tests against stand-in vehicles (hold both once, re-arm after separating, alerts, off switch).
+- The built-in simulator has no collisions and the vehicles do not sense each other. This tests
+  AEGIS's bookkeeping, not physical separation.
+- The dashboard was also driven here through the Fleet panel (plan, confirm, launch two
+  vehicles) and screenshotted mid-flight; that run was not followed to landing.
+
 ## Not tested yet
+
+- Fleets of three or four vehicles, fleets under Gazebo, a fleet with the camera or depth
+  pipelines on, and anything about a fleet on the owner's machine.
 
 - Demo 3 under Gazebo, and the Search panel driven by a person through a whole flight (it was
   loaded and screenshotted after the flight here).

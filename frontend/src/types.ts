@@ -100,6 +100,26 @@ export interface Snapshot {
   alerts: Alert[];
   playback: { time_s: number; duration_s: number | null; speed: number } | null;
   autopilot_messages: AutopilotMessage[];
+  /** Vehicles after the first, when the backend runs a fleet. */
+  fleet?: FleetVehicle[];
+}
+
+export interface FleetVehicle {
+  vehicle_id: string;
+  provenance: Provenance;
+  source: string | null;
+  simulator_attested: boolean | null;
+  return_altitude_m: number | null;
+  state: VehicleState | null;
+  mission: MissionStatus;
+  alerts: Alert[];
+}
+
+export interface FleetSearchPlan {
+  vehicle_id: string;
+  mission: Mission;
+  issues: string[];
+  summary: SarPlan["summary"];
 }
 
 export interface Waypoint {

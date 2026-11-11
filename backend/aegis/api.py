@@ -36,6 +36,7 @@ from aegis import __version__
 from aegis.adapters.px4_sitl import NotAttestedError, PX4SITLAdapter
 from aegis.config import OperatingMode, Settings
 from aegis.contracts import Alert, Severity
+from aegis.fleet import Fleet, route_conflicts, route_legs
 from aegis.hub import TelemetryHub
 from aegis.interfaces import MissionExecutor, VehicleTelemetrySource
 from aegis.missions import (
@@ -138,7 +139,11 @@ class SarPlanRequest(BaseModel):
 
 
 def build_sar(
-    settings: Settings, hub: TelemetryHub, scenario: dict[str, Any], record_dir: Path | None
+    settings: Settings,
+    hub: TelemetryHub,
+    scenario: dict[str, Any],
+    record_dir: Path | None,
+    other_hubs: list[TelemetryHub] | None = None,
 ) -> tuple[Any, str]:
     """Create the search-and-rescue service, or explain why it is off. Never raises.
 
@@ -156,9 +161,22 @@ def build_sar(
     except ImportError as exc:
         return None, f"Search dependencies are not installed ({exc.name}); see README."
     try:
+        others = other_hubs or []
         camera = ThermalCameraModel(
-            scenario, hub.source.get_state, horizontal_fov_deg=settings.thermal_hfov_deg
+            scenario,
+            hub.source.get_state,
+            horizontal_fov_deg=settings.thermal_hfov_deg,
+            vehicle_id=hub.source.vehicle_id if others else None,
         )
+        extra = [
+            ThermalCameraModel(
+                scenario,
+                other.source.get_state,
+                horizontal_fov_deg=settings.thermal_hfov_deg,
+                vehicle_id=other.source.vehicle_id,
+            )
+            for other in others
+        ]
         service = SarService(
             hub,
             scenario,
@@ -167,6 +185,7 @@ def build_sar(
             default_altitude_m=settings.sar_altitude_m,
             default_overlap=settings.sar_overlap,
             min_delta_c=settings.thermal_min_delta_c,
+            extra_thermals=extra,
         )
         return service, ""
     except (OSError, ValueError, RuntimeError, KeyError) as exc:
@@ -246,11 +265,29 @@ def build_hub(settings: Settings, record_dir: Path | None = None) -> TelemetryHu
     return TelemetryHub(source, executor, recorder, rate_hz=settings.broadcast_hz)
 
 
+def build_fleet(settings: Settings, primary: TelemetryHub, record_dir: Path | None) -> Fleet:
+    """The first vehicle plus ``fleet_size - 1`` more PX4 instances (simulation only)."""
+    hubs = [primary]
+    live = settings.mode is not OperatingMode.REPLAY and isinstance(primary.source, PX4SITLAdapter)
+    for index in range(1, settings.fleet_size if live else 1):
+        vehicle_id = f"sim-{index + 1}"
+        px4 = PX4SITLAdapter(
+            vehicle_id=vehicle_id,
+            connection_url=f"udpin://0.0.0.0:{14540 + index}",
+            grpc_port=settings.mavsdk_grpc_port + index,
+        )
+        recorder = FlightRecorder(record_dir / f"flight_{vehicle_id}.jsonl") if record_dir else None
+        executor = px4 if settings.mode is OperatingMode.SIMULATION else None
+        hubs.append(TelemetryHub(px4, executor, recorder, rate_hz=settings.broadcast_hz))
+    return Fleet(hubs, auto_hold=settings.fleet_auto_hold)
+
+
 def create_app(
     settings: Settings | None = None,
     hub: TelemetryHub | None = None,
     perception: Perception | None = None,
     navigation: NavigationService | None = None,
+    fleet: Fleet | None = None,
 ) -> FastAPI:
     settings = settings or Settings()
     logging.basicConfig(
@@ -262,6 +299,10 @@ def create_app(
     if hub is None and settings.record_flights and settings.mode is not OperatingMode.REPLAY:
         record_dir = settings.data_dir / "sessions" / time.strftime("%Y%m%dT%H%M%S")
     hub = hub or build_hub(settings, record_dir)
+    fleet = fleet or build_fleet(settings, hub, record_dir)
+    if len(fleet.hubs) > 1:
+        hub.extra_checks.append(fleet.findings)
+        hub.snapshot_extras.append(fleet.snapshot_extra)
     token = settings.operator_token or secrets.token_urlsafe(24)
     boot_id = secrets.token_hex(8)
     scenario = _load_scenario(settings.resolved_scenario_file())
@@ -280,7 +321,7 @@ def create_app(
         navigation, navigation_off_reason = build_navigation(settings, hub, scenario, record_dir)
     if navigation is not None:
         hub.extra_checks.append(navigation.findings)
-    sar, sar_off_reason = build_sar(settings, hub, scenario, record_dir)
+    sar, sar_off_reason = build_sar(settings, hub, scenario, record_dir, fleet.hubs[1:])
     if sar is not None:
         hub.extra_checks.append(sar.findings)
     if perception is not None:
@@ -309,6 +350,9 @@ def create_app(
         log.info("System at start: %s", system_snapshot() or "n/a")
         await watchdog.start()
         await hub.start()
+        await fleet.start()
+        if len(fleet.hubs) > 1:
+            log.info("Fleet of %d vehicles: %s", len(fleet.hubs), ", ".join(fleet.ids))
         try:
             if perception is not None:
                 try:
@@ -358,11 +402,13 @@ def create_app(
                 await navigation.stop()
             if perception is not None:
                 await perception.stop()
+            await fleet.stop()
             await hub.stop()
             await watchdog.stop()
 
     app = FastAPI(title="AEGIS ONE", version=__version__, lifespan=lifespan)
     app.state.sar = sar
+    app.state.fleet = fleet
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origins,
@@ -527,33 +573,52 @@ def create_app(
 
     # ---------------------------------------------------------- operator commands
 
-    @app.post("/api/missions", response_model=MissionResult)
-    async def submit(mission: Mission, executor: MissionExecutor = operator) -> MissionResult:
-        log.info("Operator submitted mission %s (%s)", mission.mission_id, mission.name)
-        if navigation is not None:
+    def rejected(mission: Mission, message: str, issues: list[str]) -> MissionResult:
+        log.warning("Mission %s rejected: %s", mission.mission_id, issues)
+        return MissionResult(
+            accepted=False,
+            status=MissionStatus(
+                mission_id=mission.mission_id,
+                name=mission.name,
+                phase=MissionPhase.REJECTED,
+                total_waypoints=len(mission.waypoints),
+                message=message,
+                issues=issues,
+                updated_at_unix_s=time.time(),
+            ),
+        )
+
+    async def submit_to(target: TelemetryHub, mission: Mission) -> MissionResult:
+        """Pre-flight checks, then hand the mission to one vehicle. A refusal here means
+        nothing was sent to that vehicle."""
+        assert target.executor is not None
+        vehicle_id = target.source.vehicle_id
+        log.info(
+            "Operator submitted mission %s (%s) to %s", mission.mission_id, mission.name, vehicle_id
+        )
+        if navigation is not None and target is hub:
             start = vehicle_start()
             if not validate_mission(mission, start_enu_m=start[:2]):
                 blocked = navigation.preflight_issues()
                 blocked += await asyncio.to_thread(navigation.checker.check_mission, mission, start)
-                if blocked:  # refused here: nothing is sent to the vehicle
-                    log.warning("Mission %s rejected: %s", mission.mission_id, blocked)
-                    return MissionResult(
-                        accepted=False,
-                        status=MissionStatus(
-                            mission_id=mission.mission_id,
-                            name=mission.name,
-                            phase=MissionPhase.REJECTED,
-                            total_waypoints=len(mission.waypoints),
-                            message="Mission rejected by the pre-flight navigation checks.",
-                            issues=blocked,
-                            updated_at_unix_s=time.time(),
-                        ),
+                if blocked:
+                    return rejected(
+                        mission, "Mission rejected by the pre-flight navigation checks.", blocked
                     )
-        result = await executor.submit_mission(mission)
+        conflicts = fleet.route_issues(vehicle_id, mission)
+        if conflicts:
+            return rejected(
+                mission, "Mission rejected: it conflicts with another vehicle's route.", conflicts
+            )
+        result = await target.executor.submit_mission(mission)
         if result.accepted:
-            hub.geofence = mission.constraints.geofence
-            hub.active_mission = mission
+            target.geofence = mission.constraints.geofence
+            target.active_mission = mission
         return result
+
+    @app.post("/api/missions", response_model=MissionResult)
+    async def submit(mission: Mission, _: MissionExecutor = operator) -> MissionResult:
+        return await submit_to(hub, mission)
 
     async def _intervene(name: str, executor: MissionExecutor) -> dict[str, str]:
         log.info("Operator commanded %s", name)
@@ -576,6 +641,57 @@ def create_app(
     @app.post("/api/vehicle/land")
     async def land(executor: MissionExecutor = operator) -> dict[str, str]:
         return await _intervene("land", executor)
+
+    # ---------------------------------------------------------------------- fleet
+
+    def fleet_vehicle(vehicle_id: str) -> TelemetryHub:
+        target = fleet.hub(vehicle_id)
+        if target is None:
+            raise HTTPException(404, f"No vehicle {vehicle_id}. Known: {', '.join(fleet.ids)}.")
+        if target.executor is None:
+            raise HTTPException(403, f"Commands are disabled in {settings.mode.value} mode.")
+        return target
+
+    @app.get("/api/fleet")
+    async def fleet_status() -> dict[str, Any]:
+        """Every vehicle's state and mission, and how far apart the airborne ones are."""
+        return fleet.status()
+
+    @app.post("/api/fleet/hold-all")
+    async def fleet_hold_all(_: MissionExecutor = operator) -> dict[str, Any]:
+        """Ask every connected vehicle to Hold. Reports per vehicle; one failure does
+        not stop the others being commanded."""
+        log.info("Operator commanded hold for the whole fleet")
+        results = {}
+        for target in fleet.hubs:
+            vehicle_id = target.source.vehicle_id
+            if target.executor is None or target.state is None or not target.state.connected:
+                results[vehicle_id] = "not connected"
+                continue
+            try:
+                await target.executor.hold()
+                results[vehicle_id] = "sent"
+            except Exception as exc:
+                results[vehicle_id] = f"refused: {exc}"
+        return {"command": "hold", "results": results}
+
+    @app.post("/api/fleet/{vehicle_id}/missions", response_model=MissionResult)
+    async def fleet_submit(
+        vehicle_id: str, mission: Mission, _: MissionExecutor = operator
+    ) -> MissionResult:
+        return await submit_to(fleet_vehicle(vehicle_id), mission)
+
+    @app.post("/api/fleet/{vehicle_id}/{command}")
+    async def fleet_command(
+        vehicle_id: str, command: str, _: MissionExecutor = operator
+    ) -> dict[str, str]:
+        names = {"hold": "hold", "return": "return_to_home", "land": "land"}
+        if command not in names:
+            raise HTTPException(404, f"Unknown command {command!r}. Use hold, return or land.")
+        target = fleet_vehicle(vehicle_id)
+        assert target.executor is not None
+        result = await _intervene(names[command], target.executor)
+        return {**result, "vehicle_id": vehicle_id}
 
     # ------------------------------------------------------------------ streaming
 
@@ -683,6 +799,51 @@ def create_app(
             "summary": summary,
             "issues": await mission_issues(mission),
         }
+
+    @app.post("/api/sar/plan/fleet")
+    async def sar_plan_fleet(request: SarPlanRequest) -> dict[str, Any]:
+        """Propose one search pattern per connected vehicle (the area cut into strips, each
+        vehicle at its own height). Nothing is sent; the operator submits each mission."""
+        from aegis.sar.coverage import CoveragePlanError
+
+        service = require_sar()
+        starts = []
+        for target in fleet.hubs:
+            if target.state is None or target.state.position_enu_m is None:
+                continue
+            p = target.state.position_enu_m
+            starts.append((target.source.vehicle_id, (p.x, p.y)))
+        if not starts:
+            raise HTTPException(409, "No vehicle has a position yet.")
+        try:
+            plans = service.plan_fleet(starts, request.altitude_rel_m, request.overlap)
+        except CoveragePlanError as exc:
+            raise HTTPException(422, str(exc)) from exc
+        legs = {plan["vehicle_id"]: route_legs(plan["mission"], None) for plan in plans}
+        out = []
+        for plan in plans:
+            vehicle_id = plan["vehicle_id"]
+            owner = fleet.hub(vehicle_id)
+            start = next(s for v, s in starts if v == vehicle_id)
+            issues = validate_mission(plan["mission"], start_enu_m=start)
+            for other_id, other_legs in legs.items():
+                if other_id != vehicle_id and route_conflicts(
+                    legs[vehicle_id], other_legs, fleet.limits
+                ):
+                    issues.append(f"The pattern conflicts with the one planned for {other_id}.")
+            out.append(
+                {
+                    "vehicle_id": vehicle_id,
+                    "mission": plan["mission"].model_dump(mode="json"),
+                    "summary": plan["summary"],
+                    "strip_enu_m": plan["strip_enu_m"],
+                    "issues": issues,
+                    "return_altitude_m": getattr(owner.source, "return_altitude_m", None)
+                    if owner
+                    else None,
+                }
+            )
+        return {"plans": out}
 
     @app.get("/api/sar/coverage")
     async def sar_coverage() -> dict[str, Any]:

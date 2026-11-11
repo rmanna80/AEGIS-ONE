@@ -5,7 +5,7 @@ from __future__ import annotations
 from enum import StrEnum
 from pathlib import Path
 
-from pydantic import field_validator
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -76,6 +76,12 @@ class Settings(BaseSettings):
     thermal_min_delta_c: float = 5.0
     sar_altitude_m: float = 25.0
     sar_overlap: float = 0.2
+
+    # Fleet (optional): number of simulated vehicles. Vehicle i (from 0) is expected on
+    # UDP port 14540+i (PX4 instance i; see scripts/run_fleet.sh) and is named sim-(i+1).
+    fleet_size: int = Field(default=1, ge=1, le=4)
+    # Ask PX4 to Hold two vehicles that get too close to each other in the air.
+    fleet_auto_hold: bool = True
 
     broadcast_hz: float = 10.0
     cors_origins: list[str] = ["http://localhost:5173", "http://127.0.0.1:5173"]

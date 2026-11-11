@@ -1,4 +1,5 @@
 import type {
+  FleetSearchPlan,
   MapPayload,
   Mission,
   MissionStatus,
@@ -78,6 +79,17 @@ export const api = {
       { decision, note },
       token,
     ),
+  sarPlanFleet: () => post<{ plans: FleetSearchPlan[] }>("/api/sar/plan/fleet", {}),
+  fleetSubmit: (vehicleId: string, mission: Mission, token: string) =>
+    post<{ accepted: boolean; status: MissionStatus }>(
+      `/api/fleet/${encodeURIComponent(vehicleId)}/missions`,
+      mission,
+      token,
+    ),
+  fleetCommand: (vehicleId: string, command: "hold" | "return" | "land", token: string) =>
+    post<unknown>(`/api/fleet/${encodeURIComponent(vehicleId)}/${command}`, undefined, token),
+  fleetHoldAll: (token: string) =>
+    post<{ results: Record<string, string> }>("/api/fleet/hold-all", undefined, token),
   hold: (token: string) => post<unknown>("/api/vehicle/hold", undefined, token),
   returnHome: (token: string) => post<unknown>("/api/vehicle/return", undefined, token),
   land: (token: string) => post<unknown>("/api/vehicle/land", undefined, token),

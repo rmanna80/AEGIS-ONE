@@ -5,15 +5,16 @@ telemetry/mission backend, and a 3D mission-control dashboard. Intended for auth
 non-weapon robotics research, environmental inspection and search and rescue, always with a
 human operator in control.
 
-**Status: Phases 0 to 2 complete; Phase 3 (navigation and mapping) and Phase 4 (thermal search
-and rescue) built and verified with software sensor models.** A simulated PX4 quadcopter flies
+**Status: Phases 0 to 2 complete; Phase 3 (navigation and mapping), Phase 4 (thermal search and
+rescue) and Phase 5 (multi-vehicle) built and verified with software sensor models on PX4's
+built-in simulator.** A simulated PX4 quadcopter flies
 geofenced, obstacle-checked waypoint missions commanded from the dashboard, with live telemetry,
 alerts, object detection and tracking, 3D occupancy mapping from depth, detour planning, search
 patterns with a thermal camera model, heat-source candidates that wait for the operator's
 decision, search reports, and synchronized recording and replay. With the Gazebo depth camera
 the map currently misses its accuracy targets because of a heading-estimate error (see
-[docs/testing/README.md](docs/testing/README.md)). Multi-drone, anomaly detection and security
-monitoring are later phases and are **not** implemented yet (see
+[docs/testing/README.md](docs/testing/README.md)). Several vehicles can fly at once with route-conflict checks and a separation monitor.
+Anomaly detection and security monitoring are later phases and are **not** implemented yet (see
 [docs/ROADMAP.md](docs/ROADMAP.md)).
 
 No drone hardware is needed. No physical-flight code path exists in this release.
@@ -50,7 +51,10 @@ No drone hardware is needed. No physical-flight code path exists in this release
 | Thermal camera (software model, stabilised mount), heat-source detection and geolocation | Verified (model data only) |
 | Search-pattern planning, coverage tracking, candidate review workflow, search report | Verified live against PX4 SITL (Demo 3: 8 of 8 criteria) |
 | Wind disturbances, depth-image view in the dashboard | Not built |
-| Thermal imagery rendered by Gazebo, replay of thermal sessions | Not built |
+| Several vehicles at once: shared frame, per-vehicle missions and commands, Hold all | Verified live with two PX4 instances (Demo 5: 8 of 8 criteria) |
+| Route-conflict refusal between vehicles | Verified live |
+| Automatic Hold when two airborne vehicles get too close | Unit-tested; **not triggered in a live flight** |
+| Thermal imagery rendered by Gazebo, replay of thermal or fleet sessions, fleets under Gazebo | Not built |
 | ROS 2 Jazzy bridge, LiDAR | Not started |
 
 "Verified" means it was executed and observed; the commands and results are in
@@ -202,6 +206,28 @@ no emissivity, weather, sun or time of day. It sits on an ideal stabilised mount
 straight down. The scenario includes a deer (indistinguishable from a person by size and
 warmth) and a person under a shelter roof (not visible from above), so the demo shows a false
 alarm and a miss as well as the finds.
+
+## Demo 5: Two vehicles search one area
+
+```bash
+bash scripts/run_fleet.sh 2 sar_field
+AEGIS_FLEET_SIZE=2 AEGIS_SCENARIO=sar_field AEGIS_THERMAL=model bash scripts/run_backend.sh
+.venv/bin/python scripts/demo5_fleet_search.py --token "$AEGIS_OPERATOR_TOKEN"
+```
+
+`run_fleet.sh` starts up to four PX4 instances on the built-in simulator, 12 m apart. The
+backend names them `sim-1`, `sim-2`, ... and puts them in one frame (the first vehicle's home).
+The dashboard gets a **Fleet** panel: each vehicle's state with its own Hold / Return / Land, a
+**Hold all** button, and a shared search that cuts the search area into one strip per vehicle
+at different heights. Both thermal cameras feed one candidate list.
+
+What keeps vehicles apart: a mission that passes within 10 m of a route another vehicle is
+flying, without 5 m of height between them, is refused before upload; each vehicle returns at
+its own altitude (30 m, 36 m, ...); and if two airborne vehicles come within 6 m horizontally
+and 4 m vertically, AEGIS asks PX4 to Hold both, once, and leaves the rest to the operator.
+Vehicles never coordinate on their own. The built-in simulator has no collisions, so nothing
+physical is being tested here. The Mission panel, camera, mapping and replay still belong to
+the first vehicle only.
 
 ## Replaying a session
 

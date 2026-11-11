@@ -128,6 +128,11 @@ class PX4SITLAdapter:
         self._mission: Mission | None = None
         self._last_progress_at = 0.0
         self._command_lock = asyncio.Lock()
+        # Fleet operation. frame_origin: express positions and missions in a frame shared
+        # with other vehicles instead of this vehicle's own home. return_altitude_m: this
+        # vehicle's Return altitude, so vehicles returning together are separated in height.
+        self.frame_origin: GeodeticPosition | None = None
+        self.return_altitude_m: float | None = None
 
     # ------------------------------------------------------------------ lifecycle
 
@@ -433,6 +438,8 @@ class PX4SITLAdapter:
                     altitude_amsl_m=home.absolute_altitude_m,
                 )
             )
+            if self.frame_origin is not None:
+                origin = LocalOrigin(geodetic=self.frame_origin)
 
         geodetic: GeodeticPosition | None = None
         rel_alt: float | None = None
@@ -607,6 +614,8 @@ class PX4SITLAdapter:
         o = origin.geodetic
         c = mission.constraints
         await self._await_heartbeat()
+        if self.return_altitude_m is not None:
+            await self._system.action.set_return_to_launch_altitude(self.return_altitude_m)
 
         fence_points = []
         for east, north in c.geofence.polygon_enu_m:

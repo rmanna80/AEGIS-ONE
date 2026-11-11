@@ -65,6 +65,8 @@ class TelemetryHub:
         self.active_mission: Mission | None = None  # the mission last accepted by the vehicle
         # Additional advisory checks contributed by optional subsystems (perception...).
         self.extra_checks: list[Callable[[], list[Finding]]] = []
+        # Extra top-level fields for the live snapshot (e.g. the other vehicles of a fleet).
+        self.snapshot_extras: list[Callable[[], dict[str, Any]]] = []
 
         self.state: VehicleState | None = None
         self.mission = MissionStatus()
@@ -106,7 +108,7 @@ class TelemetryHub:
                 "duration_s": getattr(self.source, "duration_s", None),
                 "speed": getattr(self.source, "speed", 1.0),
             }
-        return {
+        message: dict[str, Any] = {
             "type": "snapshot",
             "server_time_unix_s": time.time(),
             "state": self.state.model_dump(mode="json") if self.state else None,
@@ -117,6 +119,9 @@ class TelemetryHub:
                 m.model_dump(mode="json") for m in list(getattr(self.source, "messages", ()))[-15:]
             ],
         }
+        for extra in self.snapshot_extras:
+            message.update(extra())
+        return message
 
     async def _loop(self) -> None:
         next_tick = time.monotonic()

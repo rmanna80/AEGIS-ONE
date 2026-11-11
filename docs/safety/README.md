@@ -21,6 +21,10 @@ aircraft, and nothing here is evidence that one would be safe to fly.
 | Routes are checked against obstacles before upload | A mission passing within the clearance distance (3 m) of a known or mapped obstacle is refused and never sent | `navigation/planner.py`, `api.py` |
 | Detections are for a person to judge | Heat-source candidates start `unreviewed`; only an authenticated operator decision makes one `confirmed` or `dismissed`. Descriptions give size and temperature, never identity. | `sar/candidates.py`, `api.py` |
 | Finding something never moves the vehicle | The search service is constructed without the mission executor, so it has no way to command the vehicle; a candidate or a confirmation triggers no flight action. Tests assert no command is issued. | `api.build_sar`, `sar/service.py`, `tests/test_sar.py` |
+| Vehicles do not coordinate on their own | Each vehicle flies only a mission the operator submitted to it. There is no vehicle-to-vehicle tasking and no following. | `fleet.py`, `api.py` |
+| Routes of different vehicles are kept apart | A mission passing within 10 m of a route another vehicle is flying, without 5 m of height between them, is refused before upload. Timing is ignored, which refuses some safe routes and never accepts a route on the hope of a miss. | `fleet.route_conflicts` |
+| Two vehicles that get too close are stopped, not steered | Within 6 m horizontally and 4 m vertically, AEGIS requests Hold for both, once per encounter, and reports `blocked`. Warning from 12 m / 6 m. Can be turned off with `AEGIS_FLEET_AUTO_HOLD=false`. | `fleet.check_separation` |
+| The operator can stop everything at once | Hold all commands every connected vehicle and reports per vehicle | `api.py`, `FleetPanel.tsx` |
 
 ## Limits of these mechanisms
 

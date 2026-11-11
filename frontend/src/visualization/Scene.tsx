@@ -5,6 +5,7 @@ import { type CameraMode, useStore } from "../state/store";
 import { CameraRig } from "./CameraRig";
 import { Environment } from "./Environment";
 import { OccupancyMap } from "./OccupancyMap";
+import { FleetVehicles } from "./FleetVehicles";
 import { MODEL_SCALE, Quadcopter } from "./Quadcopter";
 import { SearchOverlay } from "./SearchOverlay";
 
@@ -49,6 +50,7 @@ export function Scene() {
         {scenario && <Environment scenario={scenario} />}
         <OccupancyMap />
         <SearchOverlay />
+        <FleetVehicles />
         <Quadcopter vehicleRef={vehicleRef} />
         <CameraRig vehicleRef={vehicleRef} />
       </Canvas>

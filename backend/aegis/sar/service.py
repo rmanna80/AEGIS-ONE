@@ -13,7 +13,9 @@ import contextlib
 import json
 import logging
 import math
+import threading
 import time
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
@@ -24,7 +26,7 @@ from aegis.hub import TelemetryHub
 from aegis.missions import Mission, MissionConstraints, Point2
 from aegis.safety import Finding
 from aegis.sar.candidates import Candidate, CandidateRegistry
-from aegis.sar.coverage import CoverageTracker, plan_lawnmower
+from aegis.sar.coverage import CoveragePlanError, CoverageTracker, plan_lawnmower, split_area
 from aegis.sar.detect import HeatBlob, detect_heat_sources
 from aegis.sar.review import ReviewRequest, ReviewStatus
 from aegis.sar.thermal import ThermalFrame, ThermalSource
@@ -52,6 +54,7 @@ class SarService:
         default_altitude_m: float = 25.0,
         default_overlap: float = 0.2,
         min_delta_c: float = 5.0,
+        extra_thermals: Sequence[ThermalSource] | None = None,
     ) -> None:
         if "search_area" not in scenario:
             raise ValueError(f"Scenario {scenario.get('scenario_id')!r} has no search_area.")
@@ -59,6 +62,11 @@ class SarService:
         self.scenario = scenario
         self.scenario_id = str(scenario["scenario_id"])
         self.thermal = thermal
+        # One thermal camera per vehicle; every camera feeds the same candidate list.
+        self.thermals: list[ThermalSource] = ([thermal] if thermal is not None else []) + list(
+            extra_thermals or []
+        )
+        self._lock = threading.Lock()
         self.save_dir = save_dir
         self.default_altitude_m = default_altitude_m
         self.default_overlap = default_overlap
@@ -76,29 +84,31 @@ class SarService:
         self.process_ms: float | None = None
         self._latest: tuple[ThermalFrame, list[HeatBlob]] | None = None
         self._last_frame_at = 0.0
-        self._task: asyncio.Task[None] | None = None
+        self._tasks: list[asyncio.Task[None]] = []
 
     # ------------------------------------------------------------------ lifecycle
 
     async def start(self) -> None:
-        if self.thermal is not None:
-            self._task = asyncio.create_task(self._loop(), name="sar-thermal")
+        for index, thermal in enumerate(self.thermals):
+            self._tasks.append(
+                asyncio.create_task(self._loop(thermal), name=f"sar-thermal-{index}")
+            )
 
     async def stop(self) -> None:
-        if self._task is not None:
-            self._task.cancel()
+        for task in self._tasks:
+            task.cancel()
+        for task in self._tasks:
             with contextlib.suppress(asyncio.CancelledError, Exception):
-                await self._task
-            self._task = None
+                await task
+        self._tasks.clear()
         if self.save_dir is not None and self.frames_processed > 0:
             with contextlib.suppress(OSError):
                 self.save_report(self.save_dir)
 
-    async def _loop(self) -> None:
-        assert self.thermal is not None
+    async def _loop(self, thermal: ThermalSource) -> None:
         while True:
             try:
-                frame = await self.thermal.read_frame()
+                frame = await thermal.read_frame()
                 if frame is None:
                     await asyncio.sleep(0.2)
                     continue
@@ -116,13 +126,17 @@ class SarService:
     def process(self, frame: ThermalFrame) -> list[HeatBlob]:
         """Detect, merge into candidates and update coverage for one frame (public for tests)."""
         blobs = detect_heat_sources(frame, min_delta_c=self.min_delta_c)
-        self.registry.observe(blobs, frame.provenance, frame.source, frame.captured_at_unix_s)
-        if frame.pose.position_enu_m[2] >= 5.0:
-            self.coverage.mark(frame.pose, frame.horizontal_fov_rad, frame.width, frame.height)
-        self._latest = (frame, blobs)
-        self._last_frame_at = time.monotonic()
-        self.frames_processed += 1
-        self._drain_events()
+        with self._lock:  # frames from several vehicles arrive on different threads
+            self.registry.observe(blobs, frame.provenance, frame.source, frame.captured_at_unix_s)
+            if frame.pose.position_enu_m[2] >= 5.0:
+                self.coverage.mark(frame.pose, frame.horizontal_fov_rad, frame.width, frame.height)
+            # The display follows the first vehicle's camera, or any camera that sees something.
+            first = self.thermals[0].source if self.thermals else frame.source
+            if self._latest is None or frame.source == first or blobs:
+                self._latest = (frame, blobs)
+            self._last_frame_at = time.monotonic()
+            self.frames_processed += 1
+            self._drain_events()
         return blobs
 
     def _drain_events(self) -> None:
@@ -164,7 +178,7 @@ class SarService:
             )
         state = self.hub.state
         if (
-            self.thermal is not None
+            bool(self.thermals)
             and state is not None
             and state.connected
             and self.frames_processed > 0
@@ -204,6 +218,43 @@ class SarService:
             mission_id=f"sar-{self.scenario_id}".replace("_", "-"),
             name=f"Search pattern over {self.scenario.get('name', self.scenario_id)}",
         )
+
+    def plan_fleet(
+        self,
+        starts: list[tuple[str, Point2]],
+        altitude_m: float | None = None,
+        overlap: float | None = None,
+        altitude_step_m: float = 6.0,
+    ) -> list[dict[str, Any]]:
+        """One search pattern per vehicle: the area cut into side-by-side strips, each
+        vehicle at its own height (``altitude_step_m`` apart) so routes never share a level.
+        Proposals only; the operator submits each one."""
+        strips = split_area(self.area, len(starts))
+        if len(strips) != len(starts):
+            raise CoveragePlanError("The search area is too small to share between the vehicles.")
+        base = altitude_m if altitude_m is not None else self.default_altitude_m
+        hfov = getattr(self.thermal, "hfov", math.radians(57.0))
+        plans = []
+        for index, ((vehicle_id, start), strip) in enumerate(zip(starts, strips, strict=True)):
+            mission, summary = plan_lawnmower(
+                strip,
+                self.constraints,
+                base + index * altitude_step_m,
+                float(hfov),
+                overlap if overlap is not None else self.default_overlap,
+                start,
+                mission_id=f"sar-{self.scenario_id}-{vehicle_id}".replace("_", "-"),
+                name=f"Search strip {index + 1} of {len(strips)} ({vehicle_id})",
+            )
+            plans.append(
+                {
+                    "vehicle_id": vehicle_id,
+                    "mission": mission,
+                    "summary": summary,
+                    "strip_enu_m": [list(p) for p in strip],
+                }
+            )
+        return plans
 
     # --------------------------------------------------------------------- status
 

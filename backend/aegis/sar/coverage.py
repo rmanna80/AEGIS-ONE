@@ -39,6 +39,45 @@ def _polygon_spans(polygon: list[Point2], y: float) -> list[tuple[float, float]]
     return list(zip(crossings[0::2], crossings[1::2], strict=False))
 
 
+def _clip(polygon: list[Point2], axis: int, limit: float, keep_below: bool) -> list[Point2]:
+    """Sutherland-Hodgman clip of a polygon against one axis-aligned line."""
+    result: list[Point2] = []
+    for i, current in enumerate(polygon):
+        previous = polygon[i - 1]
+        inside_c = current[axis] <= limit if keep_below else current[axis] >= limit
+        inside_p = previous[axis] <= limit if keep_below else previous[axis] >= limit
+        if inside_c != inside_p:
+            t = (limit - previous[axis]) / (current[axis] - previous[axis])
+            result.append(
+                (
+                    previous[0] + t * (current[0] - previous[0]),
+                    previous[1] + t * (current[1] - previous[1]),
+                )
+            )
+        if inside_c:
+            result.append(current)
+    return result
+
+
+def split_area(area: list[Point2], parts: int) -> list[list[Point2]]:
+    """Cut a search area into ``parts`` side-by-side strips of equal width along its
+    longer side, one per vehicle, so the vehicles work in separate places."""
+    if parts <= 1:
+        return [list(area)]
+    xs, ys = [p[0] for p in area], [p[1] for p in area]
+    axis = 0 if (max(xs) - min(xs)) >= (max(ys) - min(ys)) else 1
+    low = min(p[axis] for p in area)
+    width = (max(p[axis] for p in area) - low) / parts
+    strips = []
+    for i in range(parts):
+        strip = _clip(
+            _clip(list(area), axis, low + i * width, False), axis, low + (i + 1) * width, True
+        )
+        if len(strip) >= 3:
+            strips.append(strip)
+    return strips
+
+
 def plan_lawnmower(
     area: list[Point2],
     constraints: MissionConstraints,

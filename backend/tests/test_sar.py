@@ -406,3 +406,53 @@ def test_search_support_is_off_without_a_thermal_sensor_or_search_area(tmp_path:
     with TestClient(create_app(settings, TelemetryHub(vehicle, vehicle))) as client:
         status = client.get("/api/sar").json()
         assert status["enabled"] is False and "search_area" in status["reason"]
+
+
+# ----------------------------------------------------------------------------- fleet
+
+
+def test_split_area_gives_each_vehicle_its_own_strip() -> None:
+    from aegis.sar.coverage import split_area
+
+    area = [(20.0, -40.0), (140.0, -40.0), (140.0, 40.0), (20.0, 40.0)]
+    left, right = split_area(area, 2)
+    assert {p[0] for p in left} == {20.0, 80.0} and {p[0] for p in right} == {80.0, 140.0}
+    assert {p[1] for p in left} == {-40.0, 40.0}
+    assert split_area(area, 1) == [area]
+    tall = [(0.0, 0.0), (30.0, 0.0), (30.0, 90.0), (0.0, 90.0)]
+    strips = split_area(tall, 3)
+    assert [sorted({p[1] for p in s}) for s in strips] == [[0.0, 30.0], [30.0, 60.0], [60.0, 90.0]]
+
+
+def test_fleet_search_plans_are_separate_in_place_and_height() -> None:
+    from aegis.fleet import SeparationLimits, route_conflicts, route_legs
+
+    vehicle = FakeVehicle()
+    service = SarService(TelemetryHub(vehicle, vehicle), SCENARIO, None)
+    plans = service.plan_fleet([("sim-1", (0.0, 0.0)), ("sim-2", (0.0, -12.0))])
+    assert [p["vehicle_id"] for p in plans] == ["sim-1", "sim-2"]
+    first, second = (p["mission"] for p in plans)
+    assert {w.altitude_rel_m for w in first.waypoints} == {25.0}
+    assert {w.altitude_rel_m for w in second.waypoints} == {31.0}
+    assert max(w.east_m for w in first.waypoints) < min(w.east_m for w in second.waypoints)
+    assert first.mission_id != second.mission_id
+    assert validate_mission(first) == [] and validate_mission(second, (0.0, -12.0)) == []
+    legs = [route_legs(m, s) for m, s in ((first, (0.0, 0.0, 0.0)), (second, (0.0, -12.0, 0.0)))]
+    assert route_conflicts(legs[0], legs[1], SeparationLimits()) is None
+
+
+def test_two_cameras_feed_one_candidate_list() -> None:
+    vehicle = FakeVehicle()
+    cam_a = ThermalCameraModel(SCENARIO, None, seed=1, vehicle_id="sim-1")
+    cam_b = ThermalCameraModel(SCENARIO, None, seed=2, vehicle_id="sim-2")
+    service = SarService(TelemetryHub(vehicle, vehicle), SCENARIO, cam_a, extra_thermals=[cam_b])
+    lying, sitting = source("person_lying"), source("person_sitting")
+    for i in range(4):
+        service.process(frame_at(cam_a, heading_pose(lying["east_m"] + i, lying["north_m"], 25.0)))
+        service.process(
+            frame_at(cam_b, heading_pose(sitting["east_m"] + i, sitting["north_m"], 31.0))
+        )
+    sensors = {c.sensor for c in service.candidates()}
+    assert sensors == {"model:thermal-stabilised@sim-1", "model:thermal-stabilised@sim-2"}
+    assert len(service.candidates()) == 2
+    assert service.frames_processed == 8

@@ -147,6 +147,7 @@ class ThermalCameraModel:
         rate_hz: float = 4.0,
         seed: int | None = None,
         stabilised: bool = True,
+        vehicle_id: str | None = None,
     ) -> None:
         self.scene = SceneGeometry(scenario)
         self.heat = HeatSources(scenario)
@@ -157,6 +158,8 @@ class ThermalCameraModel:
         self.period_s = 1.0 / rate_hz
         self.sensor_id = "thermal-model"
         self.source = "model:thermal-stabilised" if stabilised else "model:thermal-fixed"
+        if vehicle_id is not None:
+            self.source += f"@{vehicle_id}"
         self._rays = nadir_rays_body(width, height, self.hfov)
         self._rng = np.random.default_rng(seed)
         self._frame_id = 0
