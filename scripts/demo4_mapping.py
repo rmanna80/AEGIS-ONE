@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import argparse
 import sys
+import time
 from pathlib import Path
 
 from _demo_common import Api, Flight, require_simulator, write_report
@@ -48,7 +49,18 @@ def main() -> int:
     if not nav["enabled"] or nav["depth_source"] is None:
         raise SystemExit("Start the backend with AEGIS_DEPTH=raycast (or stream).")
     scenario = api.call("/api/scenario")
+    for _ in range(40):  # up to 20 s for the first depth frames
+        if nav["frames_integrated"] > 0:
+            break
+        time.sleep(0.5)
+        nav = api.call("/api/navigation")
     print(f"scenario={scenario['scenario_id']} depth={nav['depth_source']}")
+    if nav["frames_integrated"] == 0:
+        raise SystemExit(
+            "No depth frames are reaching AEGIS, so there is nothing to map. For Gazebo, start "
+            "the bridge:  /usr/bin/python3 scripts/gz_camera_bridge.py --depth\n"
+            "and check its output. Nothing was sent to the vehicle."
+        )
 
     result = api.call("/api/missions", scenario["demo_mission"])
     print("submit:", result["status"]["phase"], "-", result["status"]["message"])

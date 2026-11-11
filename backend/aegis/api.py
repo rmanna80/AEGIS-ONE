@@ -386,6 +386,7 @@ def create_app(
         start = vehicle_start()
         issues = validate_mission(mission, start_enu_m=start[:2])
         if navigation is not None and not issues:
+            issues += navigation.preflight_issues()
             issues += await asyncio.to_thread(navigation.checker.check_mission, mission, start)
         return issues
 
@@ -437,7 +438,8 @@ def create_app(
         if navigation is not None:
             start = vehicle_start()
             if not validate_mission(mission, start_enu_m=start[:2]):
-                blocked = await asyncio.to_thread(navigation.checker.check_mission, mission, start)
+                blocked = navigation.preflight_issues()
+                blocked += await asyncio.to_thread(navigation.checker.check_mission, mission, start)
                 if blocked:  # refused here: nothing is sent to the vehicle
                     log.warning("Mission %s rejected: %s", mission.mission_id, blocked)
                     return MissionResult(
@@ -447,7 +449,7 @@ def create_app(
                             name=mission.name,
                             phase=MissionPhase.REJECTED,
                             total_waypoints=len(mission.waypoints),
-                            message="Mission rejected: the route is not clear of obstacles.",
+                            message="Mission rejected by the pre-flight navigation checks.",
                             issues=blocked,
                             updated_at_unix_s=time.time(),
                         ),

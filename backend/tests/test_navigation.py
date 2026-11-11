@@ -473,6 +473,7 @@ async def test_lost_depth_sensing_during_a_mission_holds() -> None:
     service = NavigationService(hub, WALL_SCENE, depth=DeadDepth())
     fly(hub, vehicle, airborne(0.0, 2.0, 15.0))
     hub.active_mission = over
+    assert "no depth frames have arrived" in service.preflight_issues()[0]
     await service.monitor_once()
     assert {c for c, _, _ in service.findings()} == {"depth.stale"}
     assert vehicle.commands and vehicle.commands[0].startswith("hold:Depth sensing stopped")
@@ -592,3 +593,29 @@ def test_saved_map_can_be_loaded_in_a_later_session(tmp_path: Path) -> None:
         status = client.get("/api/navigation").json()  # wrong resolution: refused, not crashed
         assert status["enabled"] is False and "different scenario or resolution" in status["reason"]
         assert client.get("/api/health").json()["status"] == "ok"
+
+
+def test_mission_is_refused_before_takeoff_when_the_depth_sensor_is_silent(tmp_path: Path) -> None:
+    """Regression: a mission was accepted, armed and then immediately held because the
+    configured depth source had never delivered a frame."""
+    scenario_file = tmp_path / "test_wall.json"
+    scenario_file.write_text(json.dumps(WALL_SCENE))
+    vehicle = FakeVehicle()
+    vehicle.overrides = {"position_enu_m": Vec3(x=0.0, y=0.0, z=0.0), "in_air": False}
+    settings = Settings(
+        scenario_file=scenario_file,
+        depth="stream",
+        depth_stream_port=0,
+        operator_token=TOKEN,
+        data_dir=tmp_path,
+        frontend_dist=tmp_path / "no-ui",
+    )
+    clear = WALL_MISSION.model_copy(deep=True)
+    clear.waypoints[0].altitude_rel_m = 15.0  # over the wall: the route itself is fine
+    body = clear.model_dump(mode="json")
+    with TestClient(create_app(settings, TelemetryHub(vehicle, vehicle))) as client:
+        check = client.post("/api/missions/validate", json=body).json()
+        assert check["valid"] is False and "no depth frames have arrived" in check["issues"][0]
+        refused = client.post("/api/missions", json=body, headers=AUTH).json()
+        assert refused["accepted"] is False and refused["status"]["phase"] == "rejected"
+        assert vehicle.commands == []

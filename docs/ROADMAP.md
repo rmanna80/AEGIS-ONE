@@ -45,8 +45,8 @@
   without it missions are checked against the geofence only.
 - The occupancy map uses PX4's pose estimate as given. There is no SLAM and no map-uncertainty
   display; altitude noise of about 1 m smears thin horizontal surfaces.
-- One camera view at a time is not enforced: RGB and depth are separate vehicles in Gazebo
-  (`gazebo-cam` vs `gazebo-depth`), so Demo 2 and Gazebo-depth mapping cannot run together.
+- The `gazebo-depth` vehicle carries both a 1920x1080 RGB camera and the depth camera, so both
+  bridges can run together, but rendering both will slow Gazebo further.
 - Maps are tied to a scenario and resolution; loading one made for another is refused.
 - Under RTL the vehicle climbs to PX4's return altitude (30 m) before flying home.
 - Session recordings are large: about 8 MB per minute of video plus about 4 MB per minute of

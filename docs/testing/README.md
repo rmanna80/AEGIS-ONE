@@ -8,7 +8,7 @@ are a record of what was observed, not a guarantee.
 
 | Suite | Command | Result |
 | --- | --- | --- |
-| Backend unit + API + perception + navigation | `pytest` | 145 passed, 3 skipped (2 SITL tests, 1 needing the COCO8 images) |
+| Backend unit + API + perception + navigation | `pytest` | 146 passed, 3 skipped (2 SITL tests, 1 needing the COCO8 images) |
 | Lint | `ruff check . && ruff format --check .` | clean |
 | Types | `mypy` (strict) | no issues in 12 source files |
 | Frontend unit | `cd frontend && npm test` | 9 passed |
@@ -168,8 +168,13 @@ sensing, and the API paths (rejection before upload, planning, map endpoints, ma
 
 - Anything under Gazebo by me (not installable on the bootstrap machine). The project owner
   reports the Gazebo launch works on WSL2.
-- Demo 2 at the urban route's new 6 m altitude (the owner reported a pass at 4 m).
-- The Gazebo depth camera path (`gazebo-depth`, `gz_camera_bridge.py --depth`): never run.
+- A complete Demo 2 run at 6 m. The owner's run at 6 m tracked `person`, `car` and `truck`
+  through the return leg; the final verdict was not captured.
+- The Gazebo depth camera path. First attempt (owner, 2026-11-11): no depth frames reached
+  AEGIS because the bridge looked for the wrong topic name (PX4's depth model publishes on
+  `/depth_camera`). Fixed, not yet re-run. That attempt also showed a mission being accepted
+  and then immediately held; missions are now refused before take-off when a configured
+  depth sensor is silent.
 - Mapping accuracy with Gazebo depth, where rendered models differ from the ground-truth boxes.
 - Mapping while the simulation runs well below real time.
 - Detection on Gazebo-rendered imagery (rendered people and vehicles may detect poorly).

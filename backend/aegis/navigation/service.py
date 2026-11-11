@@ -244,6 +244,22 @@ class NavigationService:
 
         self._findings = findings
 
+    def preflight_issues(self) -> list[str]:
+        """Reasons not to start a mission that are about the navigation sensors themselves."""
+        if self.depth is None:
+            return []
+        state = self.hub.state
+        rtf = (state.sim_real_time_factor if state else None) or 1.0
+        age = self.depth_age_s()
+        if age is None:
+            return [
+                "The depth sensor is configured but no depth frames have arrived. Start the "
+                "depth source (for Gazebo: scripts/gz_camera_bridge.py --depth) before flying."
+            ]
+        if age > DEPTH_STALE_S / max(0.05, min(1.0, rtf)):
+            return [f"Depth frames stopped arriving {age:.0f} s ago; fix the depth source first."]
+        return []
+
     def findings(self) -> list[Finding]:
         """Latest findings, for the telemetry hub's alert tracker."""
         return list(self._findings)

@@ -48,7 +48,17 @@ def find_camera_topic(depth: bool) -> str:
         ["gz", "topic", "-l"], capture_output=True, text=True, check=True, timeout=10
     ).stdout.split()
     if depth:
-        candidates = [t for t in topics if t.endswith("/depth_image")]
+        # PX4's x500_depth (OakD-Lite model) publishes depth on the fixed topic
+        # "/depth_camera"; other models use ".../depth_image". Point clouds and
+        # camera_info topics share the prefix and are not images.
+        candidates = [
+            t
+            for t in topics
+            if "depth" in t.lower()
+            and not t.endswith(("/points", "/camera_info"))
+            and "camera_info" not in t
+        ]
+        candidates.sort(key=lambda t: (not t.endswith(("/depth_camera", "/depth_image")), t))
         launch = "bash scripts/run_px4.sh gazebo-depth"
     else:
         candidates = [t for t in topics if t.endswith("/image") and "depth" not in t]
@@ -58,7 +68,8 @@ def find_camera_topic(depth: bool) -> str:
         sys.exit(
             f"No {kind} topic found. Start a vehicle that has one first:\n"
             f"  {launch}\n"
-            f"Topics seen: {len(topics)}"
+            f"Topics seen: {len(topics)}\n"
+            + "\n".join(f"  {t}" for t in topics if "image" in t or "depth" in t or "camera" in t)
         )
     if len(candidates) > 1:
         print(f"Several topics found, using the first: {candidates}", file=sys.stderr)
