@@ -142,11 +142,36 @@ export type Obstacle =
       color: string;
     };
 
+/** Flat, visual-only ground surface (road, pavement). */
+export interface Surface {
+  id: string;
+  east_m: number;
+  north_m: number;
+  size_enu_m: [number, number];
+  yaw_deg: number;
+  color: string;
+}
+
+/** A staged, static detection target. Gazebo renders the real model; the dashboard draws a proxy. */
+export interface Prop {
+  id: string;
+  kind: "person" | "vehicle";
+  model: string;
+  expected_labels: string[];
+  east_m: number;
+  north_m: number;
+  yaw_deg: number;
+  /** length, width, height of the proxy in metres */
+  size_m: [number, number, number];
+}
+
 export interface Scenario {
   scenario_id: string;
   name: string;
   ground: { size_m: number };
   landing_pad: { east_m: number; north_m: number; radius_m: number };
+  surfaces?: Surface[];
+  props?: Prop[];
   obstacles: Obstacle[];
   demo_mission: Mission;
 }
@@ -192,6 +217,7 @@ export interface PerceptionResult {
   frame_id: number;
   sensor_id: string;
   provenance: Provenance;
+  recorded_provenance?: Provenance | null;
   source: string;
   captured_at_unix_s: number;
   source_time_s: number | null;

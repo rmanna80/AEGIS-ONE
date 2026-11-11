@@ -6,7 +6,7 @@
 | --- | --- | --- |
 | 0 | Architecture and setup | Done |
 | 1 | Working 3D simulation, telemetry, waypoint mission, dashboard | Done (SIH verified; Gazebo launch confirmed by the owner) |
-| 2 | Perception: simulated RGB camera, detection, tracking, recording | In progress: detection, tracking, video panel and recording done; Gazebo camera link unverified; playback missing |
+| 2 | Perception: simulated RGB camera, detection, tracking, recording | Built. Gazebo camera link confirmed by the owner. Urban world and Demo 2 not yet run against Gazebo. |
 | 3 | Navigation and mapping: depth, occupancy, planning, wind | Not started |
 | 4 | Thermal and search and rescue | Not started |
 | 5 | Multi-drone simulation | Not started |
@@ -14,17 +14,15 @@
 | 7 | Raspberry Pi integration | Not started |
 | 8 | Physical hardware readiness (documentation and gating only) | Not started |
 
-## Next milestone: finish Phase 2
+## Next milestone: close Phase 2, start Phase 3
 
-1. Run the Gazebo camera path (`run_px4.sh gazebo-cam` + `gz_camera_bridge.py`) and fix
-   whatever its first launch turns up.
-2. Environment B (urban) with human-shaped and vehicle models, so there is something to detect
-   in simulation; then Demo 2 with acceptance criteria.
-3. Synchronized playback of recorded detections with telemetry (store video alongside the
-   detection log).
-4. Precision / recall on a meaningful labelled set, and on Gazebo-rendered imagery.
-5. Decide whether ROS 2 is needed before Phase 3. The camera link currently uses Gazebo's own
-   transport, which avoided a ROS 2 install; mapping libraries in Phase 3 will likely need it.
+1. Run Demo 2 against Gazebo (`run_px4.sh gazebo-cam urban`). Fix Fuel model names if the
+   world fails to load; if YOLO does not recognise the rendered people or vehicles, try other
+   models or lower the confidence threshold, and record what was needed.
+2. Precision / recall on Gazebo-rendered imagery using the staged targets as ground truth
+   (needs projecting prop positions into the image with the camera model).
+3. Phase 3: depth camera (`gz_x500_depth`), occupancy mapping, obstacle-aware mission
+   validation and path planning, wind. Decide then whether to add ROS 2 for mapping libraries.
 
 ## Known defects and limitations
 
@@ -35,7 +33,13 @@
   distributing a product. The backend interface accepts any compatible ONNX model.
 - No user-defined object classes yet (needs a fine-tuned model).
 - Camera frames claiming `physical` provenance are refused until Phase 7.
-- Replay has no pause or seek; speed and file are fixed at backend start.
+- Replay has no pause or seek; speed and session are fixed at backend start.
+- Mission validation ignores obstacles. Shipped routes are checked for 5 m clearance by a test,
+  but a route edited in the dashboard is not; the urban street has buildings 6 m from the route.
+- Under RTL the vehicle climbs to PX4's return altitude (30 m) before flying home.
+- Session recordings are large: about 8 MB per minute of video plus about 4 MB per minute of
+  detections. Nothing is rotated or deleted automatically.
+- The dashboard draws staged people and vehicles as proxy shapes, not the Gazebo models.
 - Simulator start / pause / reset and fault injection are not available from the dashboard.
 - Camera modes for thermal and depth do not exist yet (no such sensors until Phases 3 to 4).
 - Dashboard layout has a 1100 px minimum width; it is not designed for phones.

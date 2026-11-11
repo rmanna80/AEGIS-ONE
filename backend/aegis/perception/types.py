@@ -76,6 +76,7 @@ class PerceptionResult(_Model):
     frame_id: int
     sensor_id: str
     provenance: Provenance
+    recorded_provenance: Provenance | None = None  # original provenance when replayed
     source: str
     captured_at_unix_s: float
     source_time_s: float | None

@@ -33,7 +33,11 @@ class Settings(BaseSettings):
 
     record_flights: bool = True
     data_dir: Path = REPO_ROOT / "data" / "generated"
-    scenario_file: Path = REPO_ROOT / "simulation" / "scenarios" / "open_field.json"
+    scenario: str = "open_field"  # name of a file in simulation/scenarios/
+    scenario_file: Path | None = None  # explicit path; overrides `scenario`
+    # Replay a whole recorded session (flight + camera + detections). A directory
+    # under data/generated/sessions, or "latest". Overrides replay_file.
+    replay_session: str | None = None
     frontend_dist: Path = REPO_ROOT / "frontend" / "dist"
 
     # Perception (optional). camera: "none", "stream" (TCP frame stream, e.g. the
@@ -47,6 +51,28 @@ class Settings(BaseSettings):
 
     broadcast_hz: float = 10.0
     cors_origins: list[str] = ["http://localhost:5173", "http://127.0.0.1:5173"]
+
+    def resolved_scenario_file(self) -> Path:
+        if self.scenario_file is not None:
+            return self.scenario_file
+        return REPO_ROOT / "simulation" / "scenarios" / f"{self.scenario}.json"
+
+    def resolved_replay_session(self) -> Path | None:
+        """Directory of the session to replay, or ``None`` to replay ``replay_file``."""
+        if not self.replay_session:
+            return None
+        sessions = self.data_dir / "sessions"
+        if self.replay_session == "latest":
+            found = sorted(p for p in sessions.glob("*") if (p / "flight.jsonl").is_file())
+            if not found:
+                raise ValueError(f"No recorded sessions in {sessions}.")
+            return found[-1]
+        candidate = Path(self.replay_session)
+        if not candidate.is_absolute() and not candidate.is_dir():
+            candidate = sessions / self.replay_session
+        if not (candidate / "flight.jsonl").is_file():
+            raise ValueError(f"{candidate} is not a recorded session (no flight.jsonl).")
+        return candidate
 
     @field_validator("mode", mode="before")
     @classmethod

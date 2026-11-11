@@ -1,0 +1,293 @@
+{
+  "scenario_id": "urban",
+  "name": "Environment B - Urban training street",
+  "gazebo_world": "aegis_urban",
+  "frame": "ENU metres; origin = vehicle home at the centre of the landing pad; Gazebo world x=east, y=north, z=up",
+  "ground": {
+    "size_m": 300.0
+  },
+  "landing_pad": {
+    "east_m": 0.0,
+    "north_m": 0.0,
+    "radius_m": 1.5
+  },
+  "surfaces": [
+    {
+      "id": "street",
+      "east_m": 0.0,
+      "north_m": 45.0,
+      "size_enu_m": [
+        8.0,
+        130.0
+      ],
+      "yaw_deg": 0.0,
+      "color": "#3a3d42"
+    },
+    {
+      "id": "cross_street",
+      "east_m": 0.0,
+      "north_m": 60.0,
+      "size_enu_m": [
+        90.0,
+        8.0
+      ],
+      "yaw_deg": 0.0,
+      "color": "#3a3d42"
+    },
+    {
+      "id": "sidewalk_west",
+      "east_m": -6.5,
+      "north_m": 20.0,
+      "size_enu_m": [
+        5.0,
+        64.0
+      ],
+      "yaw_deg": 0.0,
+      "color": "#8d9096"
+    },
+    {
+      "id": "sidewalk_east",
+      "east_m": 6.5,
+      "north_m": 20.0,
+      "size_enu_m": [
+        5.0,
+        64.0
+      ],
+      "yaw_deg": 0.0,
+      "color": "#8d9096"
+    }
+  ],
+  "obstacles": [
+    {
+      "id": "building_w1",
+      "shape": "box",
+      "east_m": -18.0,
+      "north_m": 14.0,
+      "size_enu_m": [
+        16.0,
+        22.0,
+        10.0
+      ],
+      "yaw_deg": 0.0,
+      "color": "#9a8f80"
+    },
+    {
+      "id": "building_w2",
+      "shape": "box",
+      "east_m": -19.0,
+      "north_m": 40.0,
+      "size_enu_m": [
+        18.0,
+        22.0,
+        14.0
+      ],
+      "yaw_deg": 0.0,
+      "color": "#7f8a94"
+    },
+    {
+      "id": "building_e1",
+      "shape": "box",
+      "east_m": 18.0,
+      "north_m": 10.0,
+      "size_enu_m": [
+        16.0,
+        16.0,
+        8.0
+      ],
+      "yaw_deg": 0.0,
+      "color": "#a3927a"
+    },
+    {
+      "id": "building_e2",
+      "shape": "box",
+      "east_m": 19.0,
+      "north_m": 36.0,
+      "size_enu_m": [
+        18.0,
+        28.0,
+        12.0
+      ],
+      "yaw_deg": 0.0,
+      "color": "#8c8577"
+    },
+    {
+      "id": "building_n1",
+      "shape": "box",
+      "east_m": -20.0,
+      "north_m": 80.0,
+      "size_enu_m": [
+        20.0,
+        18.0,
+        9.0
+      ],
+      "yaw_deg": 0.0,
+      "color": "#86909a"
+    },
+    {
+      "id": "building_n2",
+      "shape": "box",
+      "east_m": 20.0,
+      "north_m": 82.0,
+      "size_enu_m": [
+        20.0,
+        20.0,
+        11.0
+      ],
+      "yaw_deg": 0.0,
+      "color": "#9b8d82"
+    }
+  ],
+  "props": [
+    {
+      "id": "person_1",
+      "kind": "person",
+      "model": "Standing person",
+      "expected_labels": [
+        "person"
+      ],
+      "east_m": -5.5,
+      "north_m": 18.0,
+      "yaw_deg": 180.0,
+      "size_m": [
+        0.5,
+        0.5,
+        1.8
+      ]
+    },
+    {
+      "id": "person_2",
+      "kind": "person",
+      "model": "Standing person",
+      "expected_labels": [
+        "person"
+      ],
+      "east_m": 5.5,
+      "north_m": 30.0,
+      "yaw_deg": 180.0,
+      "size_m": [
+        0.5,
+        0.5,
+        1.8
+      ]
+    },
+    {
+      "id": "person_3",
+      "kind": "person",
+      "model": "Standing person",
+      "expected_labels": [
+        "person"
+      ],
+      "east_m": -5.0,
+      "north_m": 47.0,
+      "yaw_deg": 135.0,
+      "size_m": [
+        0.5,
+        0.5,
+        1.8
+      ]
+    },
+    {
+      "id": "car_1",
+      "kind": "vehicle",
+      "model": "Hatchback blue",
+      "expected_labels": [
+        "car",
+        "truck"
+      ],
+      "east_m": 2.6,
+      "north_m": 22.0,
+      "yaw_deg": 90.0,
+      "size_m": [
+        4.2,
+        1.8,
+        1.5
+      ]
+    },
+    {
+      "id": "car_2",
+      "kind": "vehicle",
+      "model": "SUV",
+      "expected_labels": [
+        "car",
+        "truck"
+      ],
+      "east_m": -2.6,
+      "north_m": 36.0,
+      "yaw_deg": 90.0,
+      "size_m": [
+        4.8,
+        2.0,
+        1.8
+      ]
+    },
+    {
+      "id": "truck_1",
+      "kind": "vehicle",
+      "model": "Pickup",
+      "expected_labels": [
+        "car",
+        "truck"
+      ],
+      "east_m": 2.6,
+      "north_m": 50.0,
+      "yaw_deg": 90.0,
+      "size_m": [
+        5.4,
+        2.0,
+        1.9
+      ]
+    }
+  ],
+  "demo_mission": {
+    "mission_id": "demo2-street",
+    "name": "Demo 2 - Low pass along the training street",
+    "waypoints": [
+      {
+        "east_m": 0.0,
+        "north_m": 8.0,
+        "altitude_rel_m": 4.0,
+        "speed_m_s": 2.0
+      },
+      {
+        "east_m": 0.0,
+        "north_m": 30.0,
+        "altitude_rel_m": 4.0,
+        "speed_m_s": 2.0
+      },
+      {
+        "east_m": 0.0,
+        "north_m": 54.0,
+        "altitude_rel_m": 4.0,
+        "speed_m_s": 2.0
+      }
+    ],
+    "constraints": {
+      "geofence": {
+        "polygon_enu_m": [
+          [
+            -45.0,
+            -20.0
+          ],
+          [
+            45.0,
+            -20.0
+          ],
+          [
+            45.0,
+            100.0
+          ],
+          [
+            -45.0,
+            100.0
+          ]
+        ],
+        "max_altitude_rel_m": 40.0
+      },
+      "min_altitude_rel_m": 3.0,
+      "cruise_speed_m_s": 2.0,
+      "max_leg_length_m": 200.0,
+      "leg_timeout_s": 120.0,
+      "return_to_home_on_complete": true
+    }
+  }
+}

@@ -25,6 +25,9 @@ WORLDS_DIR = REPO_ROOT / "simulation" / "gazebo" / "worlds"
 # PX4 SITL default home (matches PX4's stock gz worlds).
 HOME_LAT_DEG = 47.397971057728974
 HOME_LON_DEG = 8.546163739800146
+# Standard Gazebo models (people, vehicles) are fetched from Gazebo Fuel by name
+# the first time a world is opened; Gazebo caches them under ~/.gz/fuel.
+FUEL_MODELS = "https://fuel.gazebosim.org/1.0/OpenRobotics/models"
 
 
 def _rgba(hex_color: str) -> str:
@@ -84,6 +87,34 @@ def build_world(scenario: dict) -> str:
         else:
             raise ValueError(f"Unsupported obstacle shape: {obstacle['shape']}")
         models.append(_static_model(obstacle["id"], pose, geometry, obstacle["color"]))
+
+    # Flat visual-only surfaces (roads, pavements): no collision, cannot be hit.
+    for surface in scenario.get("surfaces", []):
+        sx, sy = surface["size_enu_m"]
+        yaw = math.radians(surface.get("yaw_deg", 0.0))
+        rgba = _rgba(surface["color"])
+        models.append(f"""
+    <model name="{escape(surface["id"])}">
+      <static>true</static>
+      <pose>{surface["east_m"]} {surface["north_m"]} 0.005 0 0 {yaw:.6f}</pose>
+      <link name="link">
+        <visual name="visual">
+          <geometry><box><size>{sx} {sy} 0.01</size></box></geometry>
+          <material><ambient>{rgba}</ambient><diffuse>{rgba}</diffuse></material>
+        </visual>
+      </link>
+    </model>""")
+
+    # Staged detection targets. Always static: nothing here moves or is pursued.
+    for prop in scenario.get("props", []):
+        yaw = math.radians(prop.get("yaw_deg", 0.0))
+        models.append(f"""
+    <include>
+      <name>{escape(prop["id"])}</name>
+      <static>true</static>
+      <pose>{prop["east_m"]} {prop["north_m"]} 0 0 0 {yaw:.6f}</pose>
+      <uri>{FUEL_MODELS}/{escape(prop["model"])}</uri>
+    </include>""")
 
     # Waypoint markers: visual only, so they can never be collided with.
     for i, wp in enumerate(scenario["demo_mission"]["waypoints"], start=1):
@@ -156,14 +187,15 @@ def build_world(scenario: dict) -> str:
 
 
 def main() -> int:
-    if len(sys.argv) != 2:
+    if len(sys.argv) < 2:
         print(__doc__)
         return 2
-    scenario = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
     WORLDS_DIR.mkdir(parents=True, exist_ok=True)
-    out = WORLDS_DIR / f"{scenario['gazebo_world']}.sdf"
-    out.write_text(build_world(scenario), encoding="utf-8")
-    print(f"wrote {out.relative_to(REPO_ROOT)}")
+    for path in sys.argv[1:]:
+        scenario = json.loads(Path(path).read_text(encoding="utf-8"))
+        out = WORLDS_DIR / f"{scenario['gazebo_world']}.sdf"
+        out.write_text(build_world(scenario), encoding="utf-8")
+        print(f"wrote {out.relative_to(REPO_ROOT)}")
     return 0
 
 

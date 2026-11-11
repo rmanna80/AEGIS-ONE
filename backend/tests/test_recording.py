@@ -53,7 +53,7 @@ async def test_replay_relabels_provenance_and_advances(tmp_path: Path) -> None:
     first = await adapter.get_state()
     assert first.provenance is Provenance.REPLAYED
     assert first.recorded_provenance is Provenance.SIMULATED
-    assert first.source == "recording:flight.jsonl"
+    assert first.source == f"recording:{tmp_path.name}"  # session recordings use the folder name
     assert first.position_enu_m is not None and first.position_enu_m.x == 0.0
 
     await adapter.start()

@@ -17,9 +17,9 @@ jobs:
       - run: ruff format --check .
       - run: mypy
       - run: pytest -v
-      - name: Generated Gazebo world is in sync with the scenario
+      - name: Generated Gazebo worlds are in sync with the scenarios
         run: |
-          python scripts/generate_gazebo_world.py simulation/scenarios/open_field.json
+          python scripts/generate_gazebo_world.py simulation/scenarios/*.json
           git diff --exit-code simulation/gazebo/worlds/
 
   frontend:

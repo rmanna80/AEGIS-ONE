@@ -8,7 +8,7 @@ are a record of what was observed, not a guarantee.
 
 | Suite | Command | Result |
 | --- | --- | --- |
-| Backend unit + API + perception | `pytest` | 99 passed, 3 skipped (2 SITL tests, 1 needing the COCO8 images) |
+| Backend unit + API + perception | `pytest` | 113 passed, 3 skipped (2 SITL tests, 1 needing the COCO8 images) |
 | Lint | `ruff check . && ruff format --check .` | clean |
 | Types | `mypy` (strict) | no issues in 12 source files |
 | Frontend unit | `cd frontend && npm test` | 9 passed |
@@ -89,11 +89,29 @@ occlusions hold; long ones need appearance-based re-identification, which is not
 
 Stopping the video sender raised a `camera.no_frames` warning within a few seconds.
 
+**Session replay**: a full run (urban scenario, built-in simulator, streamed test clip) was
+recorded and replayed with `AEGIS_REPLAY_SESSION=latest`; flight, video, boxes and track IDs
+played back together, labelled `replayed`. A unit test checks alignment directly: at a given
+replay time the decoded video frame shows the object where that frame's recorded box says it is,
+including after a jump and after the replay loops.
+
+**Demo 2 rehearsal**: `demo2_detection.py --rehearsal` was run with the urban mission on the
+built-in simulator and a streamed video file. It correctly refused to run without
+`--rehearsal` (camera not `simulated`), and correctly failed criteria 2 and 3 (no vehicles in
+the clip). That exercises the script's logic only; it is not a Demo 2 result.
+
+**Urban scenario**: the mission (three waypoints at 4 m, then return) was flown on the built-in
+simulator, which has no buildings to hit. Route clearance from every obstacle is asserted by
+`test_scenarios.py`.
+
 ## Not tested yet
 
 - Anything under Gazebo by me (not installable on the bootstrap machine). The project owner
   reports the Gazebo launch works on WSL2.
-- `scripts/gz_camera_bridge.py` and the `gazebo-cam` launch: never run.
+- The urban Gazebo world (`aegis_urban.sdf`): never launched. Its people and vehicle models are
+  fetched from Gazebo Fuel by name; the names come from the standard Gazebo model set but the
+  download itself has not been exercised.
+- Demo 2 against Gazebo.
 - Detection on Gazebo-rendered imagery (rendered people and vehicles may detect poorly).
 - ROS 2, and every Phase 3+ capability.
 - PX4 geofence breach behaviour, wind, in-simulator sensor faults.

@@ -3,7 +3,7 @@ import { useMemo } from "react";
 import * as THREE from "three";
 import { enuToThree, type Triple } from "../lib/frames";
 import { useStore } from "../state/store";
-import type { Mission, Obstacle, Scenario } from "../types";
+import type { Mission, Obstacle, Prop, Scenario, Surface } from "../types";
 
 function ObstacleMesh({ obstacle }: { obstacle: Obstacle }) {
   if (obstacle.shape === "box") {
@@ -30,6 +30,56 @@ function ObstacleMesh({ obstacle }: { obstacle: Obstacle }) {
       <cylinderGeometry args={[obstacle.radius_m, obstacle.radius_m, obstacle.height_m, 24]} />
       <meshStandardMaterial color={obstacle.color} roughness={0.8} />
     </mesh>
+  );
+}
+
+function SurfaceMesh({ surface }: { surface: Surface }) {
+  const [sizeEast, sizeNorth] = surface.size_enu_m;
+  return (
+    <mesh
+      position={enuToThree(surface.east_m, surface.north_m, 0.01)}
+      rotation={[-Math.PI / 2, 0, THREE.MathUtils.degToRad(surface.yaw_deg)]}
+      receiveShadow
+    >
+      <planeGeometry args={[sizeEast, sizeNorth]} />
+      <meshStandardMaterial color={surface.color} roughness={1} />
+    </mesh>
+  );
+}
+
+/**
+ * Staged detection target. Gazebo renders the real person / vehicle model; the
+ * dashboard only marks where it stands with a simple proxy shape.
+ */
+function PropMesh({ prop }: { prop: Prop }) {
+  const [length, width, height] = prop.size_m;
+  const colour = prop.kind === "person" ? "#f472b6" : "#a78bfa";
+  return (
+    <group
+      position={enuToThree(prop.east_m, prop.north_m, 0)}
+      rotation={[0, THREE.MathUtils.degToRad(prop.yaw_deg), 0]}
+    >
+      {prop.kind === "person" ? (
+        <mesh position={[0, height / 2, 0]} castShadow>
+          <capsuleGeometry args={[width / 2, height - width, 6, 12]} />
+          <meshStandardMaterial color={colour} roughness={0.7} />
+        </mesh>
+      ) : (
+        // Model x axis (vehicle length) is ENU east at yaw 0, which is +X here.
+        <mesh position={[0, height / 2, 0]} castShadow>
+          <boxGeometry args={[length, height, width]} />
+          <meshStandardMaterial color={colour} roughness={0.6} />
+        </mesh>
+      )}
+      <Html position={[0, height + 0.9, 0]} center zIndexRange={[5, 0]}>
+        <div
+          className="num pointer-events-none whitespace-nowrap rounded-sm border px-1 text-[9px]"
+          style={{ borderColor: colour, color: colour, background: "#080b10cc" }}
+        >
+          {prop.id}
+        </div>
+      </Html>
+    </group>
   );
 }
 
@@ -165,8 +215,14 @@ export function Environment({ scenario }: { scenario: Scenario }) {
         <div className="num pointer-events-none text-[11px] font-semibold text-[#d7e0e8]">N</div>
       </Html>
 
+      {scenario.surfaces?.map((surface) => (
+        <SurfaceMesh key={surface.id} surface={surface} />
+      ))}
       {scenario.obstacles.map((o) => (
         <ObstacleMesh key={o.id} obstacle={o} />
+      ))}
+      {scenario.props?.map((prop) => (
+        <PropMesh key={prop.id} prop={prop} />
       ))}
       {draft && <Geofence mission={draft} />}
       {draft && <PlannedRoute mission={draft} />}

@@ -15,7 +15,13 @@ import cv2
 import numpy as np
 
 from aegis.perception.tracker import MultiObjectTracker
-from aegis.perception.types import CameraFrame, CameraSource, InferenceBackend, PerceptionResult
+from aegis.perception.types import (
+    CameraFrame,
+    CameraSource,
+    Image,
+    InferenceBackend,
+    PerceptionResult,
+)
 
 log = logging.getLogger(__name__)
 
@@ -23,6 +29,10 @@ STALE_CAMERA_S = 2.0
 SLOW_INFERENCE_MS = 500.0
 PREVIEW_MAX_WIDTH = 960
 PREVIEW_JPEG_QUALITY = 70
+RECORDED_VIDEO_MAX_WIDTH = 640  # keeps session videos to roughly 8 MB per minute
+RECORDED_VIDEO_FPS = 10.0  # nominal; replay is timed from the detection log, not the container
+DETECTIONS_FILE = "detections.jsonl"
+VIDEO_FILE = "video.mp4"
 
 VideoMessage = tuple[dict[str, Any], bytes]  # (result JSON, preview JPEG)
 
@@ -33,15 +43,18 @@ class PerceptionPipeline:
         camera: CameraSource,
         detector: InferenceBackend,
         tracker: MultiObjectTracker | None = None,
-        record_path: Path | None = None,
+        record_dir: Path | None = None,
     ) -> None:
+        """``record_dir``: session directory. Each processed frame appends one line to
+        ``detections.jsonl`` and one frame to ``video.mp4`` (line N <-> video frame N)."""
         self.camera = camera
         self.detector = detector
         self.tracker = tracker or MultiObjectTracker()
         self.latest: PerceptionResult | None = None
         self.selected_track_id: int | None = None
-        self._record_path = record_path
+        self._record_dir = record_dir
         self._record: IO[str] | None = None
+        self._video: cv2.VideoWriter | None = None
         self._subscribers: set[asyncio.Queue[VideoMessage]] = set()
         self._task: asyncio.Task[None] | None = None
         self._latencies: deque[float] = deque(maxlen=200)
@@ -53,9 +66,9 @@ class PerceptionPipeline:
 
     async def start(self) -> None:
         await self.camera.start()
-        if self._record_path is not None:
-            self._record_path.parent.mkdir(parents=True, exist_ok=True)
-            self._record = self._record_path.open("w", encoding="utf-8")
+        if self._record_dir is not None:
+            self._record_dir.mkdir(parents=True, exist_ok=True)
+            self._record = (self._record_dir / DETECTIONS_FILE).open("w", encoding="utf-8")
         self._task = asyncio.create_task(self._loop(), name="perception")
 
     async def stop(self) -> None:
@@ -67,6 +80,9 @@ class PerceptionPipeline:
         if self._record is not None:
             self._record.close()
             self._record = None
+        if self._video is not None:
+            self._video.release()
+            self._video = None
 
     def subscribe(self) -> asyncio.Queue[VideoMessage]:
         queue: asyncio.Queue[VideoMessage] = asyncio.Queue(maxsize=2)
@@ -144,16 +160,40 @@ class PerceptionPipeline:
         self.frames_processed += 1
 
         payload = result.model_dump(mode="json")
-        if self._record is not None:
-            self._record.write(json.dumps(payload, separators=(",", ":")) + "\n")
-        if self._subscribers:
-            jpeg = await asyncio.to_thread(_preview_jpeg, frame)
-            for queue in list(self._subscribers):
-                if queue.full():
-                    with contextlib.suppress(asyncio.QueueEmpty):
-                        queue.get_nowait()
-                queue.put_nowait((payload, jpeg))
+        recording = self._record is not None and self._record_dir is not None
+        if recording or self._subscribers:
+            preview = await asyncio.to_thread(_preview_image, frame)
+            if recording:
+                assert self._record is not None and self._record_dir is not None
+                await asyncio.to_thread(self._write_video_frame, preview)
+                self._record.write(json.dumps(payload, separators=(",", ":")) + "\n")
+                self._record.flush()
+            if self._subscribers:
+                jpeg = await asyncio.to_thread(encode_jpeg, preview)
+                for queue in list(self._subscribers):
+                    if queue.full():
+                        with contextlib.suppress(asyncio.QueueEmpty):
+                            queue.get_nowait()
+                    queue.put_nowait((payload, jpeg))
         return result
+
+    def _write_video_frame(self, preview: Image) -> None:
+        if preview.shape[1] > RECORDED_VIDEO_MAX_WIDTH:
+            scale = RECORDED_VIDEO_MAX_WIDTH / preview.shape[1]
+            height = max(2, round(preview.shape[0] * scale / 2) * 2)
+            preview = cv2.resize(preview, (RECORDED_VIDEO_MAX_WIDTH, height))
+        if self._video is None:
+            assert self._record_dir is not None
+            height, width = preview.shape[:2]
+            self._video = cv2.VideoWriter(
+                str(self._record_dir / VIDEO_FILE),
+                cv2.VideoWriter.fourcc(*"mp4v"),
+                RECORDED_VIDEO_FPS,
+                (width, height),
+            )
+            if not self._video.isOpened():
+                raise RuntimeError("OpenCV could not open the session video for writing")
+        self._video.write(preview)
 
     @property
     def fps(self) -> float | None:
@@ -188,17 +228,22 @@ class PerceptionPipeline:
             "selected_track_id": self.selected_track_id,
             "faults": faults,
             "last_error": self.last_error,
-            "recording": str(self._record_path.name) if self._record_path else None,
+            "recording": self._record_dir.name if self._record_dir else None,
         }
 
 
-def _preview_jpeg(frame: CameraFrame) -> bytes:
-    """Downscaled JPEG for the dashboard. Overlays are drawn client-side from the JSON."""
-    image = frame.image
-    if frame.width > PREVIEW_MAX_WIDTH:
-        scale = PREVIEW_MAX_WIDTH / frame.width
-        image = cv2.resize(image, (PREVIEW_MAX_WIDTH, round(frame.height * scale)))
+def _preview_image(frame: CameraFrame) -> Image:
+    """Downscaled frame for the dashboard and the session video (overlays are drawn client-side)."""
+    if frame.width <= PREVIEW_MAX_WIDTH:
+        return frame.image
+    scale = PREVIEW_MAX_WIDTH / frame.width
+    # Even dimensions keep video encoders happy.
+    height = max(2, round(frame.height * scale / 2) * 2)
+    return cv2.resize(frame.image, (PREVIEW_MAX_WIDTH, height))
+
+
+def encode_jpeg(image: Image) -> bytes:
     ok, encoded = cv2.imencode(".jpg", image, [cv2.IMWRITE_JPEG_QUALITY, PREVIEW_JPEG_QUALITY])
     if not ok:
         raise RuntimeError("JPEG encoding failed")
-    return encoded.tobytes()
+    return bytes(encoded.tobytes())

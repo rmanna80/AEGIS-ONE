@@ -15,7 +15,7 @@ repos:
         types: [python]
       - id: gazebo-world-in-sync
         name: Gazebo world matches scenario
-        entry: python scripts/generate_gazebo_world.py simulation/scenarios/open_field.json
+        entry: bash -c 'python scripts/generate_gazebo_world.py simulation/scenarios/*.json'
         language: system
         pass_filenames: false
         files: ^simulation/scenarios/

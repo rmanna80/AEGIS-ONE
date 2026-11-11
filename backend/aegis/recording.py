@@ -127,7 +127,9 @@ class RecordedTelemetryAdapter:
 
     @property
     def source(self) -> str:
-        return f"recording:{self.path.name}"
+        # Session recordings are all called flight.jsonl; name them by their session.
+        name = self.path.parent.name if self.path.name == "flight.jsonl" else self.path.name
+        return f"recording:{name}"
 
     async def start(self) -> None:
         self._task = asyncio.create_task(self._play(), name="replay")

@@ -53,7 +53,8 @@ What that first Gazebo run has to confirm:
 | Environment | State |
 | --- | --- |
 | A: Open test field | Scenario + generated world. Used by Demo 1. |
-| B: Urban, C: Forest, D: Indoor lab, E: Multi-drone arena | Not started (Phases 2 to 5) |
+| B: Urban street | Scenario + generated world with staged people and vehicles (Gazebo Fuel models). Used by Demo 2. World not yet launched. |
+| C: Forest, D: Indoor lab, E: Multi-drone arena | Not started (Phases 3 to 5) |
 
 Add an environment by writing `simulation/scenarios/<name>.json` and running
 `python scripts/generate_gazebo_world.py simulation/scenarios/<name>.json`.

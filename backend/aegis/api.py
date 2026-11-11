@@ -34,6 +34,9 @@ from aegis.recording import FlightRecorder, RecordedTelemetryAdapter
 
 if TYPE_CHECKING:
     from aegis.perception.pipeline import PerceptionPipeline
+    from aegis.perception.playback import RecordedPerceptionPlayer
+
+    Perception = PerceptionPipeline | RecordedPerceptionPlayer
 
 log = logging.getLogger("aegis.api")
 
@@ -42,9 +45,27 @@ class TrackSelection(BaseModel):
     track_id: int | None
 
 
-def build_perception(settings: Settings) -> tuple[PerceptionPipeline | None, str]:
-    """Create the perception pipeline, or explain why it is off. Never raises:
-    the simulator and dashboard must keep working without the AI stack."""
+def build_perception(
+    settings: Settings, hub: TelemetryHub, record_dir: Path | None
+) -> tuple[Perception | None, str]:
+    """Create the perception pipeline (or the playback of a recorded one), or explain
+    why it is off. Never raises: the simulator and dashboard must keep working
+    without the AI stack."""
+    if settings.mode is OperatingMode.REPLAY:
+        source = hub.source
+        try:
+            session = settings.resolved_replay_session()
+            if session is None or not isinstance(source, RecordedTelemetryAdapter):
+                return None, "The recording being replayed has no camera data."
+            from aegis.perception.playback import RecordedPerceptionPlayer
+
+            started = float(source.header["started_at_unix_s"])
+            return RecordedPerceptionPlayer(session, source, started), ""
+        except ImportError as exc:
+            return None, f"Perception dependencies are not installed ({exc.name}); see README."
+        except (OSError, ValueError, RuntimeError, KeyError) as exc:
+            return None, str(exc)
+
     if settings.camera == "none":
         return None, "No camera configured (set AEGIS_CAMERA)."
     try:
@@ -69,21 +90,19 @@ def build_perception(settings: Settings) -> tuple[PerceptionPipeline | None, str
         )
     except (OSError, ValueError, RuntimeError) as exc:
         return None, str(exc)
-    record = None
-    if settings.record_flights:
-        stamp = time.strftime("%Y%m%dT%H%M%S")
-        record = settings.data_dir / "detections" / f"detections_{stamp}.jsonl"
-    return PerceptionPipeline(camera, detector, record_path=record), ""
+    return PerceptionPipeline(camera, detector, record_dir=record_dir), ""
 
 
-def build_hub(settings: Settings) -> TelemetryHub:
+def build_hub(settings: Settings, record_dir: Path | None = None) -> TelemetryHub:
     """Wire the adapter for the configured operating mode."""
     source: VehicleTelemetrySource
     executor: MissionExecutor | None = None
     recorder: FlightRecorder | None = None
 
     if settings.mode is OperatingMode.REPLAY:
-        source = RecordedTelemetryAdapter(settings.replay_file, speed=settings.replay_speed)
+        session = settings.resolved_replay_session()
+        replay_file = session / "flight.jsonl" if session else settings.replay_file
+        source = RecordedTelemetryAdapter(replay_file, speed=settings.replay_speed)
     else:
         px4 = PX4SITLAdapter(
             vehicle_id=settings.vehicle_id,
@@ -93,27 +112,31 @@ def build_hub(settings: Settings) -> TelemetryHub:
         source = px4
         if settings.mode is OperatingMode.SIMULATION:
             executor = px4
-        if settings.record_flights:
-            stamp = time.strftime("%Y%m%dT%H%M%S")
-            recorder = FlightRecorder(settings.data_dir / "flights" / f"flight_{stamp}.jsonl")
+        if record_dir is not None:
+            recorder = FlightRecorder(record_dir / "flight.jsonl")
     return TelemetryHub(source, executor, recorder, rate_hz=settings.broadcast_hz)
 
 
 def create_app(
     settings: Settings | None = None,
     hub: TelemetryHub | None = None,
-    perception: PerceptionPipeline | None = None,
+    perception: Perception | None = None,
 ) -> FastAPI:
     settings = settings or Settings()
     logging.basicConfig(
         level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s"
     )
-    hub = hub or build_hub(settings)
+    # One directory per backend start holds the flight log, camera video and detections,
+    # so a session can be replayed with everything in sync.
+    record_dir: Path | None = None
+    if hub is None and settings.record_flights and settings.mode is not OperatingMode.REPLAY:
+        record_dir = settings.data_dir / "sessions" / time.strftime("%Y%m%dT%H%M%S")
+    hub = hub or build_hub(settings, record_dir)
     token = settings.operator_token or secrets.token_urlsafe(24)
-    scenario = _load_scenario(settings.scenario_file)
+    scenario = _load_scenario(settings.resolved_scenario_file())
     perception_off_reason = ""
     if perception is None:
-        perception, perception_off_reason = build_perception(settings)
+        perception, perception_off_reason = build_perception(settings, hub, record_dir)
     if perception is not None:
         pipeline = perception
 
@@ -240,10 +263,22 @@ def create_app(
 
     @app.get("/api/recordings")
     async def recordings() -> list[dict[str, Any]]:
-        found = []
-        for folder in (settings.data_dir / "flights", settings.replay_file.parent):
-            for path in sorted(folder.glob("*.jsonl")):
-                found.append({"file": path.name, "bytes": path.stat().st_size})
+        """Recorded sessions (newest first) and the bundled sample flight."""
+        found: list[dict[str, Any]] = []
+        for folder in sorted((settings.data_dir / "sessions").glob("*"), reverse=True):
+            flight = folder / "flight.jsonl"
+            if flight.is_file():
+                found.append(
+                    {
+                        "session": folder.name,
+                        "flight_bytes": flight.stat().st_size,
+                        "has_camera": (folder / "video.mp4").is_file()
+                        and (folder / "detections.jsonl").is_file(),
+                        "replay_with": f"AEGIS_MODE=replay AEGIS_REPLAY_SESSION={folder.name}",
+                    }
+                )
+        if settings.replay_file.is_file():
+            found.append({"sample": settings.replay_file.name, "has_camera": False})
         return found
 
     @app.post("/api/missions/validate")
@@ -312,6 +347,16 @@ def create_app(
         if perception is None:
             return {"enabled": False, "reason": perception_off_reason}
         return perception.status()
+
+    @app.get("/api/perception/latest")
+    async def perception_latest() -> dict[str, Any]:
+        """The most recent PerceptionResult (detections and tracks), without the image."""
+        if perception is None:
+            raise HTTPException(409, "Perception is not enabled.")
+        latest = perception.latest
+        if latest is None:
+            return {"result": None}
+        return {"result": latest if isinstance(latest, dict) else latest.model_dump(mode="json")}
 
     @app.post("/api/perception/select")
     async def select_track(selection: TrackSelection) -> dict[str, Any]:

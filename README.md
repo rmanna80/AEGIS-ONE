@@ -34,8 +34,10 @@ No drone hardware is needed. No physical-flight code path exists in this release
 | Multi-object tracking (Kalman + Hungarian), IDs, histories, short-occlusion coasting | Verified on synthetic ground truth and a real-model video run |
 | Camera sources: video file, TCP frame stream | Verified |
 | Dashboard video panel: boxes, track IDs, trails, click-to-highlight, latency | Verified in a browser |
-| Detection recording (JSONL) | Verified; playback of recorded detections not built yet |
-| Gazebo camera to AEGIS bridge (`scripts/gz_camera_bridge.py`) | **Written, not yet run** |
+| Session recording (flight + camera video + detections) and synchronized replay | Verified |
+| Environment B (urban street with staged people and vehicles) | Dashboard and built-in simulator verified; **Gazebo world not yet launched** |
+| Demo 2 (AI detection) script | Logic rehearsed with a video file; **not yet run against Gazebo** |
+| Gazebo camera to AEGIS bridge (`scripts/gz_camera_bridge.py`) | Confirmed working by the project owner |
 | ROS 2 Jazzy bridge, LiDAR, thermal | Not started |
 
 "Verified" means it was executed and observed; the commands and results are in
@@ -95,7 +97,7 @@ Try it on any video file (no Gazebo needed):
 AEGIS_CAMERA=video:/path/to/clip.mp4 bash scripts/run_backend.sh
 ```
 
-With the simulated drone's camera in Gazebo (three terminals; **this path is untested**):
+With the simulated drone's camera in Gazebo (three terminals):
 
 ```bash
 bash scripts/run_px4.sh gazebo-cam                  # x500 with a forward RGB camera
@@ -107,6 +109,35 @@ The dashboard then shows a split screen: 3D view on the left, camera with boxes 
 on the right. Clicking an object highlights its track; it never changes what the drone does.
 Dashed boxes marked "predicted" are tracks coasting through a missed detection or occlusion.
 Measure the detector on your machine with `python scripts/eval_detector.py`.
+
+## Demo 2: AI detection (urban scenario)
+
+A street with three standing people and three parked vehicles; the drone makes a slow pass at
+4 m and the detector has to find both kinds of target. Four terminals:
+
+```bash
+bash scripts/run_px4.sh gazebo-cam urban        # first launch downloads the models from Gazebo Fuel
+AEGIS_SCENARIO=urban AEGIS_CAMERA=stream bash scripts/run_backend.sh
+/usr/bin/python3 scripts/gz_camera_bridge.py
+.venv/bin/python scripts/demo2_detection.py --token "$AEGIS_OPERATOR_TOKEN"
+```
+
+Acceptance criteria: mission completes; camera frames stay `simulated` and never stop; at least
+one confirmed track per kind of staged target (person; car or truck); detections stored; no
+critical alerts. **This has not been run against Gazebo yet.** Two things may need adjusting on
+first run: the Fuel model names, and whether YOLO recognises Gazebo's rendered people and cars.
+The targets are static, the route is fixed, and nothing steers the drone toward a detection.
+
+## Replaying a session
+
+Each backend run records to `data/generated/sessions/<timestamp>/` (flight log, camera video,
+detections). Replay the newest one with everything in sync:
+
+```bash
+AEGIS_MODE=replay AEGIS_REPLAY_SESSION=latest AEGIS_SCENARIO=urban bash scripts/run_backend.sh
+```
+
+`AEGIS_REPLAY_SPEED=4` plays faster. `curl -s localhost:8000/api/recordings` lists sessions.
 
 ## Demo 1: Autonomous survey
 

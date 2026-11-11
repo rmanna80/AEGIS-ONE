@@ -74,6 +74,9 @@ export function Scene() {
         <Legend colour="#ff8c1a" label="Planned route / waypoint" dashed />
         <Legend colour="#3ecf8e" label="Waypoint reached" />
         <Legend colour="#ff5d5d" label="Geofence" dashed />
+        {scenario?.props && scenario.props.length > 0 && (
+          <Legend colour="#f472b6" label="Staged person / vehicle (proxy shape)" />
+        )}
         <span className="mt-1 text-[9px]">
           Vehicle drawn at {MODEL_SCALE}x scale · 10 m grid · ENU frame
         </span>

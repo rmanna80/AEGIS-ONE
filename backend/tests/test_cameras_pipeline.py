@@ -157,7 +157,7 @@ async def test_stream_camera_receives_frames_over_tcp() -> None:
 
 
 def write_video(path: Path, frames: int = 12) -> None:
-    writer = cv2.VideoWriter(str(path), cv2.VideoWriter_fourcc(*"mp4v"), 60.0, (320, 240))
+    writer = cv2.VideoWriter(str(path), cv2.VideoWriter.fourcc(*"mp4v"), 60.0, (320, 240))
     assert writer.isOpened(), "OpenCV build cannot write mp4v"
     for i in range(frames):
         writer.write(scene(i))
@@ -202,7 +202,7 @@ class ListCamera:
 
 async def test_pipeline_detects_tracks_records_and_reports(tmp_path: Path) -> None:
     record = tmp_path / "detections.jsonl"
-    pipeline = PerceptionPipeline(ListCamera([]), BrightBlobDetector(), record_path=record)
+    pipeline = PerceptionPipeline(ListCamera([]), BrightBlobDetector(), record_dir=tmp_path)
     await pipeline.start()
     assert "camera.no_frames" in pipeline.status()["faults"]
 
@@ -260,13 +260,14 @@ async def test_tracks_are_reset_when_the_source_restarts() -> None:
 
 
 def test_perception_is_optional(tmp_path: Path) -> None:
-    pipeline, reason = build_perception(Settings(camera="none"))
+    idle = TelemetryHub(FakeVehicle())
+    pipeline, reason = build_perception(Settings(camera="none"), idle, None)
     assert pipeline is None and "No camera configured" in reason
     pipeline, reason = build_perception(
-        Settings(camera="stream", detector_model=tmp_path / "missing.onnx")
+        Settings(camera="stream", detector_model=tmp_path / "missing.onnx"), idle, None
     )
     assert pipeline is None and "not found" in reason
-    pipeline, reason = build_perception(Settings(camera="webcam"))
+    pipeline, reason = build_perception(Settings(camera="webcam"), idle, None)
     assert pipeline is None and "Unknown AEGIS_CAMERA" in reason
 
     vehicle = FakeVehicle()

@@ -165,6 +165,7 @@ export function VideoPanel() {
         {provenance && (
           <span className={`num rounded-sm border px-1.5 text-[10px] font-semibold uppercase ${PROVENANCE_TONE[provenance]}`}>
             {provenance}
+            {result?.recorded_provenance ? ` (of ${result.recorded_provenance})` : ""}
           </span>
         )}
         <span className="num truncate text-[10px] text-dim">{result?.source ?? status.camera_source}</span>
