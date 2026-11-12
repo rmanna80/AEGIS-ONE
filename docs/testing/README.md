@@ -177,8 +177,21 @@ autopilot's pose error (`/api/map/accuracy`). Route checks and holds never use t
 
 Autopilot pose error against simulator truth over the flight: heading 2.4 deg mean, 5.7 deg
 maximum; horizontal position 0.09 m mean, 0.47 m maximum. So the mapper and camera model are
-sound, position is good, and the shortfall is the heading estimate. Why PX4's heading is off
-in this Gazebo setup is not yet known. No anomaly or security alert was raised during that
+sound, position is good, and the shortfall is the heading estimate.
+
+Cause, from readings on the owner's machine with the vehicle on the pad facing due east:
+PX4's magnetometer reads x -0.0096, y -0.2162 gauss (body frame), which is a field pointing
+2.5 deg WEST of true north, while PX4 uses a declination of 3.41 deg EAST from its lookup
+table (`EKF2_DECL_TYPE` 3). The 5.9 deg disagreement predicts a heading of 95.9 deg where the
+truth is 90; PX4 reported 95.3. Why Gazebo's simulated field and PX4's table disagree is
+upstream of AEGIS and not known.
+
+`scripts/gz_calibrate_compass.py` measures the simulated field against Gazebo's true heading
+and sets PX4's declination to match (simulation airframes only; reversible). Checked here on
+the built-in simulator, whose field is consistent by construction: it measured 3.9 deg against
+the expected 3.4 (the built-in magnetometer is noisy), and setting a deliberately wrong
+declination moved PX4's heading by about the expected amount after a restart. It has NOT been
+run against Gazebo, and Demo 4 has not been re-run with it. No anomaly or security alert was raised during that
 Gazebo flight, and the localhost-only MAVLink listener connected.
 
 **Obstacle detection and replanning (open field, tower unknown to the route checker):** 6 of 6

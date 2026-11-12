@@ -16,10 +16,9 @@
 
 ## Next milestone: heading error, then Phase 7
 
-1. Heading estimate under Gazebo. On the pad the autopilot reports about 95 deg where Gazebo has
-   the model at 90 deg; the depth map lands about half a metre east and fails Demo 4. Record the
-   owner's Demo 4 numbers with the true-pose scoring (not captured yet), find why PX4's heading
-   is off in the generated world, and re-run.
+1. Heading estimate under Gazebo. Cause found: Gazebo's simulated magnetic field points 2.5 deg
+   west of north where PX4 expects 3.4 deg east. Run `scripts/gz_calibrate_compass.py --apply`
+   on the owner's machine, restart, and re-run Demo 4. Unverified until then.
 2. Find the process behind the slow memory decline (about 75 MB per 10 s) in Gazebo depth runs,
    and the fast one with stock 1080p cameras.
 3. Remaining Phase 3 items: wind, a depth-image view, pose estimation from sensors, map
