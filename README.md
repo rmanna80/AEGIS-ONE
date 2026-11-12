@@ -47,7 +47,7 @@ No drone hardware is needed. No physical-flight code path exists in this release
 | 3D occupancy mapping from depth, save / load, accuracy against ground truth | Verified (Demo 4: precision 0.99, recall 0.93 of observed surface) |
 | Obstacle-aware mission validation (known obstacles + live map) | Verified |
 | Route monitoring with automatic Hold, operator-approved detour planning (A*) | Verified live against PX4 SITL |
-| Gazebo depth camera link (`gazebo-depth` + `gz_camera_bridge.py --depth`) | Runs on the owner's machine; map accuracy below target (0.63 / 0.59) because the autopilot's heading is a few degrees off |
+| Gazebo depth camera link (`gazebo-depth` + `gz_camera_bridge.py --depth`) | Runs on the owner's machine. Map accuracy 0.74 / 0.75 with the autopilot's pose (below target), 0.998 / 0.82 with the simulator's true pose: the autopilot's heading is 2 to 6 degrees off |
 | Thermal camera (software model, stabilised mount), heat-source detection and geolocation | Verified (model data only) |
 | Search-pattern planning, coverage tracking, candidate review workflow, search report | Verified live against PX4 SITL (Demo 3: 8 of 8 criteria) |
 | Wind disturbances, depth-image view in the dashboard | Not built |

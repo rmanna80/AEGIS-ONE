@@ -164,10 +164,22 @@ reproduces the failure (precision / recall: 0.99 / 0.99 at 0 deg, 0.86 / 0.95 at
 0.58 / 0.78 at 3.5 deg, 0.51 / 0.19 at 5.26 deg). The in-flight heading error has not been
 measured yet, and why PX4's heading estimate is off in this world is not known.
 
-To measure it, the Gazebo depth bridge now attaches the simulator's ground-truth pose to each
+To measure it, the Gazebo depth bridge attaches the simulator's ground-truth pose to each
 frame. AEGIS integrates a second, scoring-only map with it and reports both scores plus the
 autopilot's pose error (`/api/map/accuracy`). Route checks and holds never use the true pose.
-This path has unit tests for the frame conversion and parsing but has NOT been run on Gazebo.
+
+**Measured on the owner's machine, 2026-11-12** (357 frames, every one with a true pose):
+
+| Map built from | Precision | Recall | Verdict |
+| --- | --- | --- | --- |
+| Autopilot pose estimate | 0.744 | 0.747 | Fails (0.90 / 0.80) |
+| Simulator's true pose, same frames | 0.998 | 0.819 | Passes |
+
+Autopilot pose error against simulator truth over the flight: heading 2.4 deg mean, 5.7 deg
+maximum; horizontal position 0.09 m mean, 0.47 m maximum. So the mapper and camera model are
+sound, position is good, and the shortfall is the heading estimate. Why PX4's heading is off
+in this Gazebo setup is not yet known. No anomaly or security alert was raised during that
+Gazebo flight, and the localhost-only MAVLink listener connected.
 
 **Obstacle detection and replanning (open field, tower unknown to the route checker):** 6 of 6
 criteria. The mission was accepted, the tower was mapped in flight, Hold was commanded with the
@@ -313,8 +325,6 @@ checks. The audit chain cannot show a log truncated at the end or replaced whole
 
 - Demo 3 under Gazebo, and the Search panel driven by a person through a whole flight (it was
   loaded and screenshotted after the flight here).
-- The Gazebo ground-truth pose path (`gz_camera_bridge.py --depth` pose subscription, scoring
-  map, pose-error report). The owner reports the run worked; the numbers were not captured.
 
 - Anything under Gazebo by me (not installable on the bootstrap machine). The project owner
   reports the Gazebo launch works on WSL2.
