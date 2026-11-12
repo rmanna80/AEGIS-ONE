@@ -12,11 +12,11 @@ is developed before it ever meets an aircraft: real companion hardware, simulate
    your browser ── SSH tunnel ────────────────────┘
 ```
 
-**Status: not yet run on a Raspberry Pi.** Everything that can be checked without one was:
-the dependencies all publish 64-bit ARM builds for Python 3.12 and 3.13, the extra MAVLink
-link was flown end to end on one machine (Demo 1, 5 of 5, with the backend configured as it
-would be on the Pi), and the scripts pass a syntax check. The setup script, the network path
-between WSL2 and the Pi, and every timing on the Pi are unverified until you run them.
+**Status: installed and benchmarked on a Raspberry Pi 5; not yet flown with it.** The setup
+script and benchmark ran on the owner's Pi 5 (results in `docs/testing/README.md`). The extra
+MAVLink link was flown end to end on one machine only (Demo 1, 5 of 5, with the backend
+configured as on the Pi). The network path between WSL2 and the Pi, a flight with the Pi in
+the loop, the tunnel and the systemd unit are still unverified.
 
 **Do not connect the Pi to a real flight controller.** AEGIS refuses to command anything that
 does not prove it is a simulator, and no hardware path exists in this release.
@@ -96,8 +96,8 @@ install PX4 or Gazebo. Then see what the Pi can do:
 ```
 
 That times object detection, the thermal pipeline and depth mapping on the Pi and compares
-them with what a flight needs. For reference, a 2-core x86 virtual machine measured 78 ms,
-11 ms and 14 ms (median). Please send me the Pi's numbers; I have none.
+them with what a flight needs. Measured medians: 158 ms, 15 ms and 21 ms on a Pi 5; 78 ms, 11 ms and
+14 ms on a 2-core x86 virtual machine.
 
 ## Part 3: Fly the simulator with the Pi in the loop
 

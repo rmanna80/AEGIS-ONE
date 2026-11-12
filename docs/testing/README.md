@@ -357,9 +357,21 @@ Nothing in this phase has run on a Raspberry Pi. What was checked without one:
 | `scripts/pi_benchmark.py` on a 2-core x86 VM | Detection 78 ms, thermal 11 ms, depth mapping 14 ms (median); all inside their budgets |
 | `scripts/setup_pi.sh`, `deploy/aegis-backend.service` | Syntax only |
 
-Unverified: the setup script on Raspberry Pi OS, MAVLink from WSL2 to the Pi across a real
-network, all timings and temperatures on the Pi, `vcgencmd` parsing against real output, the
-SSH tunnel workflow, and the systemd unit.
+**On the owner's Raspberry Pi 5 (Model B Rev 1.0, 4 cores, Python 3.13.5), 2026-11-12:**
+`scripts/setup_pi.sh` completed and `scripts/pi_benchmark.py` reported:
+
+| Workload | Median | p95 | Budget |
+| --- | --- | --- | --- |
+| Object detection (YOLO11n, 640x480) | 158.1 ms | 160.0 ms | 500 ms |
+| Thermal pipeline | 15.1 ms | 15.4 ms | 250 ms |
+| Depth mapping (320x240 frame) | 21.0 ms | 21.2 ms | 200 ms |
+
+Temperature 49.6 C before and 54.0 C after; the firmware reported no power or throttling
+flags (so `vcgencmd` was read correctly). These are one workload at a time over under a
+minute; sustained combined load and its temperature have not been measured.
+
+Still unverified: MAVLink from WSL2 to the Pi across a real network, a flight with the Pi in
+the loop, the SSH tunnel workflow, and the systemd unit.
 
 ## Not tested yet
 
