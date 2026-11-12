@@ -190,9 +190,26 @@ upstream of AEGIS and not known.
 and sets PX4's declination to match (simulation airframes only; reversible). Checked here on
 the built-in simulator, whose field is consistent by construction: it measured 3.9 deg against
 the expected 3.4 (the built-in magnetometer is noisy), and setting a deliberately wrong
-declination moved PX4's heading by about the expected amount after a restart. It has NOT been
-run against Gazebo, and Demo 4 has not been re-run with it. No anomaly or security alert was raised during that
-Gazebo flight, and the localhost-only MAVLink listener connected.
+declination moved PX4's heading by about the expected amount after a restart.
+
+**After calibration, on the owner's machine, 2026-11-12:** the script measured the simulated
+declination at -2.57 deg (60 readings, twice) against PX4's +3.41. After `--apply` and a
+restart the heading error on the pad fell from +5.3 deg to +2.3 deg, and Demo 4 passed 5 of 5:
+
+| Map built from | Precision | Recall |
+| --- | --- | --- |
+| Autopilot pose estimate | 0.970 | 0.809 |
+| Simulator's true pose, same 362 frames | 0.997 | 0.819 |
+
+In-flight pose error: heading 0.64 deg mean (was 2.4), 5.71 deg maximum (unchanged, and not yet
+explained; a brief transient), horizontal 0.03 m mean. Recall passes its 0.80 mark by 0.009,
+which is one run's margin, not a comfortable one. The 2.3 deg left on the pad is also
+unexplained.
+
+`scripts/run_px4.sh` now passes the calibrated declination to Gazebo launches and PX4's own
+lookup to built-in-simulator launches (PX4's `PX4_PARAM_*` start-up overrides), so the
+calibration does not leak into the built-in simulator. The built-in half was checked here; the
+Gazebo half has not been run.
 
 **Obstacle detection and replanning (open field, tower unknown to the route checker):** 6 of 6
 criteria. The mission was accepted, the tower was mapped in flight, Hold was commanded with the

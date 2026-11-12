@@ -21,7 +21,10 @@ Usage, with `bash scripts/run_px4.sh gazebo-depth urban` running and the vehicle
     python3 scripts/gz_calibrate_compass.py --restore  # put the previous values back
 
 After --apply or --restore, restart the simulator so the estimator starts with the new
-value. The previous values are kept in data/generated/compass_calibration.json.
+value. The measured declination and the previous values are kept in
+data/generated/compass_calibration.json; scripts/run_px4.sh applies the measured value to
+Gazebo launches and PX4's own lookup to built-in-simulator launches, so each simulator
+gets the declination that matches its magnetic field.
 
 Never point this at a real autopilot: a real compass is calibrated by the procedure in
 the PX4 documentation, not by copying a simulator's field.
@@ -159,6 +162,7 @@ def main() -> int:
         saved = json.loads(SAVED.read_text())
         px4.set_param("EKF2_DECL_TYPE", saved["EKF2_DECL_TYPE"])
         px4.set_param("EKF2_MAG_DECL", saved["EKF2_MAG_DECL"])
+        SAVED.unlink()  # run_px4.sh stops applying the Gazebo declination
         print(
             f"Restored EKF2_DECL_TYPE={saved['EKF2_DECL_TYPE']:g}, "
             f"EKF2_MAG_DECL={saved['EKF2_MAG_DECL']:g}. Restart the simulator."
@@ -190,11 +194,14 @@ def main() -> int:
             "simulated field's."
         )
         return 0
-    if not SAVED.is_file():  # keep the ORIGINAL values, not ones from an earlier --apply
-        SAVED.parent.mkdir(parents=True, exist_ok=True)
-        SAVED.write_text(
-            json.dumps({"EKF2_DECL_TYPE": current_type, "EKF2_MAG_DECL": current_decl}, indent=2)
-        )
+    # Keep the ORIGINAL values (not ones from an earlier --apply), and record the measured
+    # declination so scripts/run_px4.sh can apply it to Gazebo launches only.
+    saved = json.loads(SAVED.read_text()) if SAVED.is_file() else {}
+    saved.setdefault("EKF2_DECL_TYPE", current_type)
+    saved.setdefault("EKF2_MAG_DECL", current_decl)
+    saved["gazebo_declination_deg"] = round(measured, 2)
+    SAVED.parent.mkdir(parents=True, exist_ok=True)
+    SAVED.write_text(json.dumps(saved, indent=2))
     px4.set_param("EKF2_DECL_TYPE", 0)
     px4.set_param("EKF2_MAG_DECL", round(measured, 2))
     print(

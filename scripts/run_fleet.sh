@@ -34,6 +34,12 @@ if [ -n "$LEFTOVER" ]; then
   fi
 fi
 
+# The built-in simulator's magnetic field matches PX4's own declination lookup. Undo a
+# Gazebo compass calibration for these vehicles (see scripts/gz_calibrate_compass.py).
+if [ -f "$REPO_ROOT/data/generated/compass_calibration.json" ]; then
+  export PX4_PARAM_EKF2_DECL_TYPE="$(python3 -c 'import json,sys; print(int(json.load(open(sys.argv[1])).get("EKF2_DECL_TYPE",3)))' "$REPO_ROOT/data/generated/compass_calibration.json")"
+fi
+
 # PX4's default simulated home; later vehicles are placed south of it.
 HOME_LAT=47.397742
 HOME_LON=8.545594

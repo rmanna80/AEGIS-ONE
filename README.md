@@ -12,7 +12,7 @@ geofenced, obstacle-checked waypoint missions commanded from the dashboard, with
 alerts, object detection and tracking, 3D occupancy mapping from depth, detour planning, search
 patterns with a thermal camera model, heat-source candidates that wait for the operator's
 decision, search reports, and synchronized recording and replay. With the Gazebo depth camera
-the map currently misses its accuracy targets because of a heading-estimate error (see
+the map needs a one-time compass calibration to reach its accuracy targets (see
 [docs/testing/README.md](docs/testing/README.md)). Several vehicles can fly at once with route-conflict checks and a separation monitor.
 Anomaly detection and security monitoring are later phases and are **not** implemented yet (see
 [docs/ROADMAP.md](docs/ROADMAP.md)).
@@ -47,7 +47,7 @@ No drone hardware is needed. No physical-flight code path exists in this release
 | 3D occupancy mapping from depth, save / load, accuracy against ground truth | Verified (Demo 4: precision 0.99, recall 0.93 of observed surface) |
 | Obstacle-aware mission validation (known obstacles + live map) | Verified |
 | Route monitoring with automatic Hold, operator-approved detour planning (A*) | Verified live against PX4 SITL |
-| Gazebo depth camera link (`gazebo-depth` + `gz_camera_bridge.py --depth`) | Runs on the owner's machine. Map accuracy 0.74 / 0.75 with the autopilot's pose (below target), 0.998 / 0.82 with the simulator's true pose: the autopilot's heading is 2 to 6 degrees off |
+| Gazebo depth camera link (`gazebo-depth` + `gz_camera_bridge.py --depth`) | Demo 4 passes on the owner's machine (precision 0.97, recall 0.81) after `scripts/gz_calibrate_compass.py`; without it the autopilot's heading is about 6 degrees off and the map fails |
 | Thermal camera (software model, stabilised mount), heat-source detection and geolocation | Verified (model data only) |
 | Search-pattern planning, coverage tracking, candidate review workflow, search report | Verified live against PX4 SITL (Demo 3: 8 of 8 criteria) |
 | Wind disturbances, depth-image view in the dashboard | Not built |

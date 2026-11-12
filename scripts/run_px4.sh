@@ -46,13 +46,34 @@ if [ -n "$LEFTOVER" ]; then
   fi
 fi
 
+# Compass declination for this simulator. Gazebo's simulated magnetic field does not match
+# PX4's declination table (see scripts/gz_calibrate_compass.py); the built-in simulator's
+# does. PX4 reads PX4_PARAM_* at start-up, so each launch gets the value that fits.
+compass_params() {  # $1 = gazebo | builtin
+  local file="$REPO_ROOT/data/generated/compass_calibration.json"
+  [ -f "$file" ] || return 0
+  if [ "$1" = "gazebo" ]; then
+    local decl
+    decl="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("gazebo_declination_deg",""))' "$file")"
+    [ -n "$decl" ] || return 0
+    export PX4_PARAM_EKF2_DECL_TYPE=0 PX4_PARAM_EKF2_MAG_DECL="$decl"
+    echo "Compass: using the calibrated Gazebo declination ($decl deg)."
+  else
+    local kind
+    kind="$(python3 -c 'import json,sys; print(int(json.load(open(sys.argv[1])).get("EKF2_DECL_TYPE",3)))' "$file")"
+    export PX4_PARAM_EKF2_DECL_TYPE="$kind"
+  fi
+}
+
 case "$SIM" in
   sih)
+    compass_params builtin
     cd "$BUILD"
     # -d: no interactive shell, so it also runs without a terminal.
     PX4_SIM_MODEL=sihsim_quadx exec ./bin/px4 -d
     ;;
   gazebo|gazebo-cam|gazebo-depth)
+    compass_params gazebo
     MODEL=gz_x500
     [ "$SIM" = "gazebo-cam" ] && MODEL=gz_x500_mono_cam
     [ "$SIM" = "gazebo-depth" ] && MODEL=gz_x500_depth

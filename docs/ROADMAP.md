@@ -7,18 +7,18 @@
 | 0 | Architecture and setup | Done |
 | 1 | Working 3D simulation, telemetry, waypoint mission, dashboard | Done (SIH verified; Gazebo launch confirmed by the owner) |
 | 2 | Perception: simulated RGB camera, detection, tracking, recording | Done. Demo 2 reported passing on Gazebo by the owner (at 4 m; route since raised to 6 m). |
-| 3 | Navigation and mapping: depth, occupancy, planning, wind | Built and verified with the software depth sensor. Gazebo depth runs on the owner's machine but the map misses its accuracy targets (heading-estimate error). Wind and SLAM not built. |
+| 3 | Navigation and mapping: depth, occupancy, planning, wind | Built and verified with the software depth sensor. Gazebo depth passes Demo 4 on the owner's machine after a compass calibration (precision 0.97, recall 0.81). Wind and SLAM not built. |
 | 4 | Thermal and search and rescue | Built and verified live on PX4 SITL with a software thermal model (Demo 3: 8 of 8). No Gazebo-rendered thermal imagery; no thermal replay. |
 | 5 | Multi-drone simulation | Built and verified live with two PX4 instances on the built-in simulator (Demo 5: 8 of 8). The automatic separation Hold is unit-tested only. No Gazebo fleet, no fleet replay; camera, mapping and the mission planner serve the first vehicle only. |
 | 6 | Cybersecurity and anomaly detection | Built and verified live on PX4 SITL (Demo 6: 8 of 8). Rule-based checks on the first vehicle only; no learned model; MAVLink is unsigned and the MAVSDK control port is open on all interfaces. |
 | 7 | Raspberry Pi integration | Not started |
 | 8 | Physical hardware readiness (documentation and gating only) | Not started |
 
-## Next milestone: heading error, then Phase 7
+## Next milestone: Phase 7
 
-1. Heading estimate under Gazebo. Cause found: Gazebo's simulated magnetic field points 2.5 deg
-   west of north where PX4 expects 3.4 deg east. Run `scripts/gz_calibrate_compass.py --apply`
-   on the owner's machine, restart, and re-run Demo 4. Unverified until then.
+1. Gazebo heading: resolved by calibration on the owner's machine (Demo 4 now 5 of 5). Left
+   over: 2.3 deg of heading error on the pad, a 5.7 deg transient in flight, and a recall that
+   passes by under 0.01. Repeat Demo 4 a few times to see the spread.
 2. Find the process behind the slow memory decline (about 75 MB per 10 s) in Gazebo depth runs,
    and the fast one with stock 1080p cameras.
 3. Remaining Phase 3 items: wind, a depth-image view, pose estimation from sensors, map
