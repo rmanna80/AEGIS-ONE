@@ -8,9 +8,9 @@ are a record of what was observed, not a guarantee.
 
 | Suite | Command | Result |
 | --- | --- | --- |
-| Backend unit + API + perception + navigation + search + fleet + security | `pytest` | 203 passed, 1 skipped here (the SITL tests are collected separately) |
+| Backend unit + API + perception + navigation + search + fleet + security + device | `pytest` | 207 passed, 1 skipped here (the SITL tests are collected separately) |
 | Lint | `ruff check . && ruff format --check .` | clean |
-| Types | `mypy` (strict) | no issues in 39 source files |
+| Types | `mypy` (strict) | no issues in 40 source files |
 | Frontend unit | `cd frontend && npm test` | 9 passed |
 | Frontend build | `cd frontend && npm run build` | type-checks and builds |
 | Live simulation | `AEGIS_SITL_TESTS=1 pytest tests/simulation -v` | 2 passed in 145 s |
@@ -344,6 +344,22 @@ Limits: the checks are fixed rules with hand-set thresholds, on the first vehicl
 careful attacker who alters position and velocity consistently would pass the navigation
 checks. The audit chain cannot show a log truncated at the end or replaced wholesale. The
 "outside Hold" is produced inside AEGIS; no second ground station was connected.
+
+## Raspberry Pi companion (Phase 7, 2026-11-12)
+
+Nothing in this phase has run on a Raspberry Pi. What was checked without one:
+
+| Check | Result |
+| --- | --- |
+| 64-bit ARM builds of every dependency (Python 3.12 and 3.13) | All available, including `mavsdk-grpc` 4.0.5 with its bundled server and `onnxruntime` |
+| Extra MAVLink link (`scripts/link_companion.sh`) plus a backend listening as on the Pi (`udpin://0.0.0.0`) | Simulator attested; Demo 1 passed 5 of 5 through that link, on one machine |
+| Device health monitor | Unit tests with stand-in values for temperature and the firmware's power flags; on this x86 machine it reports no temperature and no flags, and raises nothing |
+| `scripts/pi_benchmark.py` on a 2-core x86 VM | Detection 78 ms, thermal 11 ms, depth mapping 14 ms (median); all inside their budgets |
+| `scripts/setup_pi.sh`, `deploy/aegis-backend.service` | Syntax only |
+
+Unverified: the setup script on Raspberry Pi OS, MAVLink from WSL2 to the Pi across a real
+network, all timings and temperatures on the Pi, `vcgencmd` parsing against real output, the
+SSH tunnel workflow, and the systemd unit.
 
 ## Not tested yet
 

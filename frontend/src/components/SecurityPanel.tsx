@@ -72,6 +72,25 @@ export function SecurityPanel() {
             ))}
           </ul>
 
+          {status.device && (
+            <div>
+              <h3 className="panel-title mb-1">This computer</h3>
+              <p className="num text-dim">
+                {status.device.model ?? status.device.machine} · {status.device.cpu_count ?? "?"} cores ·{" "}
+                {status.device.temperature_c != null
+                  ? `${status.device.temperature_c.toFixed(0)} °C`
+                  : "temperature n/a"}{" "}
+                · load {status.device.load_1min ?? "?"} ·{" "}
+                {status.device.disk_free_mb != null
+                  ? `${(status.device.disk_free_mb / 1024).toFixed(0)} GB free`
+                  : "disk n/a"}
+                {status.device.throttled && status.device.throttled.length > 0 && (
+                  <span className="text-warn"> · {status.device.throttled.join(", ")}</span>
+                )}
+              </p>
+            </div>
+          )}
+
           <div>
             <h3 className="panel-title mb-1">Anomaly detectors</h3>
             {anomaly.enabled ? (

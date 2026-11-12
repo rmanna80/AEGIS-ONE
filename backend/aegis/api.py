@@ -38,6 +38,7 @@ from aegis.adapters.px4_sitl import NotAttestedError, PX4SITLAdapter
 from aegis.anomaly import AnomalyMonitor
 from aegis.config import OperatingMode, Settings
 from aegis.contracts import Alert, Severity
+from aegis.device import DeviceMonitor
 from aegis.faults import KINDS as FAULT_KINDS
 from aegis.faults import FaultInjector, FaultRequest
 from aegis.fleet import Fleet, route_conflicts, route_legs
@@ -313,6 +314,8 @@ def create_app(
     audit = AuditLog(record_dir / "audit.jsonl" if record_dir is not None else None)
     security = SecurityMonitor(audit)
     hub.extra_checks.append(security.findings)
+    device = DeviceMonitor(settings.data_dir)
+    hub.extra_checks.append(device.findings)
     anomaly = AnomalyMonitor(hub) if settings.anomaly else None
     if anomaly is not None:
         hub.extra_checks.append(anomaly.findings)
@@ -367,6 +370,7 @@ def create_app(
         log.info("System at start: %s", system_snapshot() or "n/a")
         await watchdog.start()
         await hub.start()
+        await device.start()
         await fleet.start()
         if len(fleet.hubs) > 1:
             log.info("Fleet of %d vehicles: %s", len(fleet.hubs), ", ".join(fleet.ids))
@@ -420,6 +424,7 @@ def create_app(
             if perception is not None:
                 await perception.stop()
             await fleet.stop()
+            await device.stop()
             await hub.stop()
             await watchdog.stop()
 
@@ -678,6 +683,11 @@ def create_app(
 
     # ---------------------------------------------------- security and anomalies
 
+    @app.get("/api/device")
+    async def device_status() -> dict[str, Any]:
+        """Health of the computer running this backend (temperature, power, storage)."""
+        return device.snapshot
+
     @app.get("/api/security")
     async def security_status() -> dict[str, Any]:
         """Configuration posture, authentication failures, the audit log's state, the
@@ -690,7 +700,9 @@ def create_app(
                 cors_origins=settings.cors_origins,
                 fault_injection=injector is not None,
                 mode=settings.mode.value,
+                host=settings.host,
             ),
+            "device": device.snapshot,
             "auth_failures_recent": security.recent_failures(),
             "auth_failures_total": security.failures_total,
             "command_requests_total": security.commands_total,

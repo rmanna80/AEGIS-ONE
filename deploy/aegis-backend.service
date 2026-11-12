@@ -1,0 +1,30 @@
+# systemd unit for running the AEGIS backend on a companion computer at boot.
+# SIMULATION ONLY: this starts the same backend as scripts/run_backend.sh.
+#
+# Install (replace USER and the path if your checkout is elsewhere):
+#   sudo cp deploy/aegis-backend.service /etc/systemd/system/
+#   sudo sed -i "s/USER/$(whoami)/g" /etc/systemd/system/aegis-backend.service
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now aegis-backend
+#   journalctl -u aegis-backend -f        # follow its log
+# Remove:
+#   sudo systemctl disable --now aegis-backend && sudo rm /etc/systemd/system/aegis-backend.service
+[Unit]
+Description=AEGIS ONE backend (simulation companion)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=USER
+WorkingDirectory=/home/USER/AEGIS-ONE
+ExecStart=/usr/bin/env bash scripts/run_backend.sh
+Restart=on-failure
+RestartSec=5
+# Settings come from /home/USER/AEGIS-ONE/.env (operator token, AEGIS_PX4_URL, ...).
+NoNewPrivileges=true
+ProtectSystem=full
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

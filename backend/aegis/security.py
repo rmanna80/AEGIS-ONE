@@ -158,6 +158,7 @@ def posture(
     cors_origins: list[str],
     fault_injection: bool,
     mode: str,
+    host: str = "127.0.0.1",
 ) -> list[dict[str, str]]:
     """Checks of this installation's configuration. level: ok | info | warning."""
     checks: list[dict[str, str]] = []
@@ -183,8 +184,19 @@ def posture(
     else:
         add("operator_token", "ok", "The operator token is set and long enough.")
 
-    host = px4_url.split("://", 1)[-1].rsplit(":", 1)[0]
     if is_loopback(host):
+        add("api_listener", "ok", "The dashboard and API are reachable from this machine only.")
+    else:
+        add(
+            "api_listener",
+            "warning",
+            f"The dashboard and API listen on {host}: anyone on the network can reach them, "
+            "the operator token is the only protection, and it travels unencrypted. Prefer "
+            "AEGIS_HOST=127.0.0.1 with an SSH tunnel.",
+        )
+
+    mavlink_host = px4_url.split("://", 1)[-1].rsplit(":", 1)[0]
+    if is_loopback(mavlink_host):
         add(
             "mavlink_listener", "ok", "The MAVLink listener accepts packets from this machine only."
         )
@@ -193,7 +205,8 @@ def posture(
             "mavlink_listener",
             "warning",
             f"The MAVLink listener ({px4_url}) accepts packets from any network interface. "
-            "Set AEGIS_PX4_URL=udpin://127.0.0.1:14540 unless the autopilot is on another machine.",
+            "Needed when the simulated autopilot runs on another machine (a companion-computer "
+            "setup); otherwise set AEGIS_PX4_URL=udpin://127.0.0.1:14540.",
         )
     add(
         "mavsdk_grpc",

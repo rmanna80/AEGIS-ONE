@@ -371,4 +371,14 @@ export interface SecurityStatus {
     | { enabled: false }
     | { enabled: true; detectors: Record<string, string>; detections: Record<string, number>; active: string[] };
   faults: { enabled: boolean; active: { kind: string; remaining_s: number }[] };
+  device?: {
+    model: string | null;
+    is_raspberry_pi: boolean;
+    machine: string;
+    cpu_count: number | null;
+    temperature_c: number | null;
+    load_1min: number | null;
+    disk_free_mb: number | null;
+    throttled: string[] | null;
+  };
 }

@@ -91,6 +91,11 @@ class Settings(BaseSettings):
     # monitors. Simulation mode and an attested simulator only. Off unless set.
     fault_injection: bool = False
 
+    # Address the API and dashboard listen on (read by scripts/run_backend.sh). Keep
+    # 127.0.0.1 and reach a companion computer through an SSH tunnel; 0.0.0.0 exposes
+    # the dashboard to the whole network over unencrypted HTTP.
+    host: str = "127.0.0.1"
+
     broadcast_hz: float = 10.0
     cors_origins: list[str] = ["http://localhost:5173", "http://127.0.0.1:5173"]
 
