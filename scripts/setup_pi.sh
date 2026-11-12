@@ -54,6 +54,9 @@ fi
 if [ ! -f .env ]; then
   cp .env.example .env
   TOKEN="$(python3 -c 'import secrets; print(secrets.token_hex(32))')"
+  # Replace the placeholder token rather than adding a second line: two lines made
+  # commands that read the token from .env pick up both.
+  sed -i '/^AEGIS_OPERATOR_TOKEN=/d' .env
   {
     echo ""
     echo "# Added by scripts/setup_pi.sh"

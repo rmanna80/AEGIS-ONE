@@ -123,7 +123,7 @@ them with what a flight needs. Measured medians: 158 ms, 15 ms and 21 ms on a Pi
 4. **Pi** (a second SSH session): run a demo. The token is in `~/AEGIS-ONE/.env`.
    ```bash
    cd ~/AEGIS-ONE
-   .venv/bin/python scripts/demo1_survey.py --token "$(grep AEGIS_OPERATOR_TOKEN .env | cut -d= -f2)"
+   .venv/bin/python scripts/demo1_survey.py --token "$(grep '^AEGIS_OPERATOR_TOKEN=' .env | tail -1 | cut -d= -f2)"
    ```
 
 The dashboard's **Security** section shows the Pi's model, temperature and any power flags

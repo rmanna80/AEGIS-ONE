@@ -330,6 +330,15 @@ def test_remote_command_clients_and_posture() -> None:
     assert good["operator_token"] == good["mavlink_listener"] == good["cors"] == "ok"
     assert good["mavsdk_grpc"] == "warning"  # a known exposure this release cannot close
     assert levels(operator_token="short")["operator_token"] == "warning"
+    placeholder = posture(
+        operator_token="change-me",
+        token_generated=False,
+        px4_url="udpin://127.0.0.1:14540",
+        cors_origins=[],
+        fault_injection=False,
+        mode="simulation",
+    )
+    assert "placeholder" in next(c["text"] for c in placeholder if c["id"] == "operator_token")
     assert levels(px4_url="udpin://0.0.0.0:14540")["mavlink_listener"] == "warning"
     assert levels(cors_origins=["*"])["cors"] == "warning"
     assert levels(fault_injection=True)["fault_injection"] == "info"

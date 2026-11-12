@@ -24,6 +24,7 @@ from aegis.contracts import Severity
 from aegis.safety import Finding
 
 GENESIS = "0" * 64
+PLACEHOLDER_TOKENS = {"change-me", "changeme", "token", "password"}
 
 
 def _digest(previous: str, body: dict[str, Any]) -> str:
@@ -173,6 +174,13 @@ def posture(
             "operator_token",
             "info",
             "The operator token was generated for this run and printed to the backend log.",
+        )
+    elif operator_token is not None and operator_token.strip().lower() in PLACEHOLDER_TOKENS:
+        add(
+            "operator_token",
+            "warning",
+            "The operator token is still the placeholder from .env.example, which anyone can "
+            "guess. Replace it with a random value (for example: openssl rand -hex 32).",
         )
     elif operator_token is not None and len(operator_token) < 24:
         add(
