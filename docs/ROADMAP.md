@@ -11,7 +11,7 @@
 | 4 | Thermal and search and rescue | Built and verified live on PX4 SITL with a software thermal model (Demo 3: 8 of 8). No Gazebo-rendered thermal imagery; no thermal replay. |
 | 5 | Multi-drone simulation | Built and verified live with two PX4 instances on the built-in simulator (Demo 5: 8 of 8). The automatic separation Hold is unit-tested only. No Gazebo fleet, no fleet replay; camera, mapping and the mission planner serve the first vehicle only. |
 | 6 | Cybersecurity and anomaly detection | Built and verified live on PX4 SITL (Demo 6: 8 of 8). Rule-based checks on the first vehicle only; no learned model; MAVLink is unsigned and the MAVSDK control port is open on all interfaces. |
-| 7 | Raspberry Pi integration | Built: setup script, companion MAVLink link, device health monitor, benchmark, systemd unit, guide. Done for the core path: installed, benchmarked and flown on the owner's Pi 5 (Demo 1, 5 of 5, simulator on the PC). Other demos and sensors on the Pi not yet run. |
+| 7 | Raspberry Pi integration | Built: setup script, companion MAVLink link, device health monitor, benchmark, systemd unit, guide. Done for the core path: installed, benchmarked and flown on the owner's Pi 5 (Demo 1, 5 of 5; Demo 3, 8 of 8; simulator on the PC). Demos 2, 4, 5 and 6 on the Pi not yet run. |
 | 8 | Physical hardware readiness (documentation and gating only) | Not started |
 
 ## Next milestone: Phase 8
@@ -33,7 +33,7 @@
    detection of a second ground station from MAVLink traffic itself, MAVLink 2 signing, a
    MAVSDK server bound to localhost, an anchor for the audit log's final hash, a learned
    model only if the rule-based checks prove insufficient.
-7. Remaining Phase 7 items: Demos 3 and 6 and object detection on the Pi during a flight,
+7. Remaining Phase 7 items: Demo 6 and object detection on the Pi during a flight,
    temperature over a long run, the systemd unit, Gazebo with the Pi in the loop.
 8. Phase 8: hardware readiness (documentation and gating only).
 

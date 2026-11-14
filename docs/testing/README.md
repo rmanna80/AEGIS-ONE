@@ -388,8 +388,13 @@ Two failures on the way, both fixed:
   `telemetry.frozen` and `link.lost` alerts fired within 2 s. `run_px4.sh` now adds the link
   at every launch when `AEGIS_COMPANION_IP` is set.
 
-Still unverified on the Pi: every demo other than Demo 1, sensors and detection running during
-a flight, sustained temperature, the dashboard through the SSH tunnel beyond opening it, the
+- Demo 3 (thermal search) then passed 8 of 8 on the Pi in 223 s, with the thermal camera model,
+  heat-source detection and coverage tracking running on the Pi during the flight: 959
+  thermal frames, 100% coverage, 6 of 6 visible sources listed. The same demo took 228 s on
+  the PC. Temperature during that flight was not captured.
+
+Still unverified on the Pi: Demos 2, 4, 5 and 6, object detection during a flight, sustained
+temperature, the dashboard through the SSH tunnel beyond opening it, the
 systemd unit, and Gazebo with the Pi in the loop.
 
 ## Not tested yet
