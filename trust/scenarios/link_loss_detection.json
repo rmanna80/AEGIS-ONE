@@ -1,0 +1,79 @@
+{
+  "schema": "aegis.trust-scenario/1",
+  "id": "link-loss-detection",
+  "title": "Loss of the vehicle link is detected, reported and recorded",
+  "purpose": "The operator must be told within seconds when vehicle data stops arriving, and the surrounding record must be preserved for investigation. Requirement R-LINK-1.",
+  "environment": {
+    "simulator": "px4_sitl",
+    "scenario_id": "open_field",
+    "provenance": "simulated",
+    "needs_fault_injection": true,
+    "devices": [
+      "backend host",
+      "PX4 SITL"
+    ]
+  },
+  "initial_conditions": "Vehicle landed at home, no mission in progress, backend recording, fault injection enabled.",
+  "mission": "demo_mission",
+  "baseline_s": 8.0,
+  "fault": {
+    "kind": "link_drop",
+    "duration_s": 6.0,
+    "inject_when": "flying_mission"
+  },
+  "expected_behaviour": "A critical link.lost alert appears within 3 s and clears within 5 s of the link returning. An incident package is produced and verifies. The vehicle is not commanded by the monitors and continues its mission.",
+  "criteria": [
+    {
+      "id": "C1",
+      "description": "No link or anomaly alert before the fault",
+      "measure": "no_alert_before_fault"
+    },
+    {
+      "id": "C2",
+      "description": "Link loss is alerted quickly",
+      "measure": "alert_raised_within_s",
+      "code": "link.lost",
+      "max_s": 3.0,
+      "safety_critical": true
+    },
+    {
+      "id": "C3",
+      "description": "The alert clears when the link returns",
+      "measure": "alert_cleared_within_s",
+      "code": "link.lost",
+      "max_s": 5.0
+    },
+    {
+      "id": "C4",
+      "description": "The mission is not interrupted by the monitors",
+      "measure": "mission_phase_in",
+      "phases": [
+        "active",
+        "returning",
+        "completed"
+      ]
+    },
+    {
+      "id": "C5",
+      "description": "The incident is preserved",
+      "measure": "incident_packaged"
+    },
+    {
+      "id": "C6",
+      "description": "The preserved evidence verifies",
+      "measure": "incident_verifies"
+    },
+    {
+      "id": "C7",
+      "description": "The record of what AEGIS saw during the event is complete",
+      "measure": "incident_completeness_at_least",
+      "min_fraction": 0.95
+    }
+  ],
+  "random_seed": null,
+  "max_duration_s": 400.0,
+  "limitations": [
+    "The link is reported as down inside AEGIS; MAVLink between PX4 and AEGIS is not actually interrupted.",
+    "Built-in PX4 simulator only; no network between the vehicle and the backend."
+  ]
+}

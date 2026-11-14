@@ -19,7 +19,12 @@ class VehicleTelemetrySource(Protocol):
     """Read-only access to one vehicle's state."""
 
     vehicle_id: str
-    provenance: Provenance
+
+    @property
+    def provenance(self) -> Provenance:
+        """What this source's data is. It may change as the source learns what it is
+        connected to; it is never reported as simulated on assumption."""
+        ...
 
     async def start(self) -> None:
         """Begin acquiring telemetry. Must return promptly; connect in the background."""

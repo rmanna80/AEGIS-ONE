@@ -1,7 +1,7 @@
 // Mirrors backend/aegis/contracts.py and backend/aegis/missions.py.
 // Units and frames are part of the field names; see the Python docstrings.
 
-export type Provenance = "simulated" | "replayed" | "physical";
+export type Provenance = "simulated" | "replayed" | "physical" | "unknown";
 export type Severity = "info" | "warning" | "critical";
 
 export interface Vec3 {

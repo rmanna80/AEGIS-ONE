@@ -95,8 +95,6 @@ class NotAttestedError(RuntimeError):
 
 
 class PX4SITLAdapter:
-    provenance = Provenance.SIMULATED
-
     def __init__(
         self,
         vehicle_id: str = "sim-1",
@@ -113,6 +111,8 @@ class PX4SITLAdapter:
         self._tasks: list[asyncio.Task[None]] = []
         self._attested_airframe: str | None = None
         self._attestation_error: str | None = "Not connected to an autopilot yet."
+        self._not_a_simulator = False
+        self._provenance_before_loss = Provenance.UNKNOWN
 
         self._t: dict[str, Any] = {}  # latest raw telemetry by stream name
         self._last_rx = 0.0  # monotonic time of the last position/attitude sample
@@ -335,9 +335,14 @@ class PX4SITLAdapter:
             up = self._connected()
             if up and not self._link_was_up:
                 log.info("Autopilot telemetry link up")
+                self._provenance_before_loss = Provenance.UNKNOWN
             elif not up and self._link_was_up:
                 log.warning("Autopilot telemetry link lost")
-                self._attested_airframe = None  # whatever reconnects must be identified again
+                # Keep labelling the (now stale) data as what it was; whatever reconnects
+                # must be identified again before it is called simulated.
+                self._provenance_before_loss = self.provenance
+                self._attested_airframe = None
+                self._not_a_simulator = False
                 self._attestation_error = "Link to the autopilot was lost."
                 self._clock_samples.clear()
             self._link_was_up = up
@@ -354,6 +359,9 @@ class PX4SITLAdapter:
 
     def _refuse(self, error: str) -> None:
         self._attested_airframe = None
+        # The autopilot answered and did not prove it is a simulator: from here on its
+        # data is treated as coming from real hardware.
+        self._not_a_simulator = True
         if error != self._attestation_error:
             log.error(error)
         self._attestation_error = error
@@ -409,8 +417,20 @@ class PX4SITLAdapter:
         )
         self._attested_airframe = name
         self._attestation_error = None
+        self._not_a_simulator = False
 
     # ------------------------------------------------------------------ telemetry
+
+    @property
+    def provenance(self) -> Provenance:
+        """What the data is, by evidence: simulated only once the autopilot has proved it
+        is a simulator; physical once it has answered without that proof; unknown until
+        it has answered at all. Nothing is assumed to be simulated."""
+        if self.attested:
+            return Provenance.SIMULATED
+        if self._not_a_simulator:
+            return Provenance.PHYSICAL
+        return Provenance.UNKNOWN if self._link_was_up else self._provenance_before_loss
 
     @property
     def attested(self) -> bool:
@@ -422,6 +442,8 @@ class PX4SITLAdapter:
 
     @property
     def source(self) -> str:
+        if self._not_a_simulator:
+            return "px4:not-a-simulator"
         return f"px4_sitl:{self._attested_airframe or 'unattested'}"
 
     def _connected(self) -> bool:

@@ -1,0 +1,77 @@
+{
+  "schema": "aegis.trust-scenario/1",
+  "id": "stale-telemetry-detection",
+  "title": "Telemetry that stops changing is detected, reported and recorded",
+  "purpose": "Data that keeps arriving but no longer changes must not be shown as current. The operator must be warned and the event preserved. Requirement R-DATA-1.",
+  "environment": {
+    "simulator": "px4_sitl",
+    "scenario_id": "open_field",
+    "provenance": "simulated",
+    "needs_fault_injection": true,
+    "devices": [
+      "backend host",
+      "PX4 SITL"
+    ]
+  },
+  "initial_conditions": "Vehicle landed at home, no mission in progress, backend recording, fault injection enabled.",
+  "mission": "demo_mission",
+  "baseline_s": 8.0,
+  "fault": {
+    "kind": "freeze",
+    "duration_s": 6.0,
+    "inject_when": "flying_mission"
+  },
+  "expected_behaviour": "A critical telemetry.frozen alert appears within 4 s of the data freezing. The frozen snapshots are labelled as injected. An incident package is produced and verifies. The vehicle continues its mission.",
+  "criteria": [
+    {
+      "id": "C1",
+      "description": "No telemetry alert before the fault",
+      "measure": "no_alert_before_fault"
+    },
+    {
+      "id": "C2",
+      "description": "Frozen data is alerted quickly",
+      "measure": "alert_raised_within_s",
+      "code": "telemetry.frozen",
+      "max_s": 4.0,
+      "safety_critical": true
+    },
+    {
+      "id": "C3",
+      "description": "Altered data is labelled",
+      "measure": "snapshot_labelled"
+    },
+    {
+      "id": "C4",
+      "description": "The mission is not interrupted by the monitors",
+      "measure": "mission_phase_in",
+      "phases": [
+        "active",
+        "returning",
+        "completed"
+      ]
+    },
+    {
+      "id": "C5",
+      "description": "The incident is preserved",
+      "measure": "incident_packaged"
+    },
+    {
+      "id": "C6",
+      "description": "The preserved evidence verifies",
+      "measure": "incident_verifies"
+    },
+    {
+      "id": "C7",
+      "description": "The record of what AEGIS saw during the event is complete",
+      "measure": "incident_completeness_at_least",
+      "min_fraction": 0.95
+    }
+  ],
+  "random_seed": null,
+  "max_duration_s": 400.0,
+  "limitations": [
+    "The freeze repeats one snapshot inside AEGIS; the simulator keeps producing fresh data.",
+    "Built-in PX4 simulator only."
+  ]
+}

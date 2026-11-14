@@ -14,6 +14,7 @@ JSONL is append-only, so a crash loses at most the last line.
 from __future__ import annotations
 
 import asyncio
+import bisect
 import contextlib
 import json
 import time
@@ -53,7 +54,15 @@ class FlightRecorder:
     def _write(self, kind: str, data: Any) -> None:
         if self._file is None:
             return
-        record = {"kind": kind, "t": round(time.monotonic() - self._t0, 4), "data": data}
+        # Two clocks side by side, never merged: "t" is this computer's monotonic clock
+        # since the recording opened; "utc" is its wall clock. The autopilot's own clock
+        # travels inside each state as vehicle_time_s.
+        record = {
+            "kind": kind,
+            "t": round(time.monotonic() - self._t0, 4),
+            "utc": round(time.time(), 3),
+            "data": data,
+        }
         self._file.write(json.dumps(record, separators=(",", ":")) + "\n")
         self._file.flush()
 
@@ -62,6 +71,14 @@ class FlightRecorder:
 
     def record_event(self, kind: str, data: dict[str, Any]) -> None:
         self._write(kind, data)
+
+    @property
+    def is_open(self) -> bool:
+        return self._file is not None
+
+    def elapsed_s(self) -> float:
+        """Recording time now ("t" of a record written at this instant)."""
+        return time.monotonic() - self._t0
 
     def close(self) -> None:
         if self._file is not None:
@@ -119,6 +136,10 @@ class RecordedTelemetryAdapter:
         if not self._states:
             raise ValueError(f"{path}: recording contains no state records")
         self._missions = [r for r in records if r["kind"] == "mission"]
+        self.records = records  # everything, for the investigation timeline
+        self._times = [float(r["t"]) for r in self._states]
+        self.start_s = self._times[0]
+        self.paused = False
         self.duration_s = float(self._states[-1]["t"])
         self._index = 0
         self.playback_time_s = 0.0
@@ -142,18 +163,32 @@ class RecordedTelemetryAdapter:
             self._task = None
 
     async def _play(self) -> None:
+        """Advance a playback clock; the state shown is the last one at or before it."""
+        self.playback_time_s = self.start_s
+        last = time.monotonic()
         while True:
-            started = time.monotonic()
-            for i, record in enumerate(self._states):
-                due = started + record["t"] / self.speed
-                delay = due - time.monotonic()
-                if delay > 0:
-                    await asyncio.sleep(delay)
-                self._index = i
-                self.playback_time_s = record["t"]
-            if not self.loop:
-                self.finished = True
-                return
+            await asyncio.sleep(0.05)
+            now = time.monotonic()
+            if not self.paused:
+                self.playback_time_s += (now - last) * self.speed
+            last = now
+            if self.playback_time_s >= self.duration_s:
+                if self.loop and not self.paused:
+                    self.playback_time_s = self.start_s
+                else:
+                    self.playback_time_s = self.duration_s
+                    self.finished = True
+            self._index = max(0, bisect.bisect_right(self._times, self.playback_time_s) - 1)
+
+    def seek(self, t_s: float) -> None:
+        self.playback_time_s = min(max(t_s, self.start_s), self.duration_s)
+        self._index = max(0, bisect.bisect_right(self._times, self.playback_time_s) - 1)
+        self.finished = False
+
+    def set_speed(self, speed: float) -> None:
+        if not 0.05 <= speed <= 20.0:
+            raise ValueError("speed must be between 0.05 and 20")
+        self.speed = speed
 
     def replayed_mission_status(self) -> MissionStatus:
         """The mission status that was current at the playback position."""
@@ -167,7 +202,12 @@ class RecordedTelemetryAdapter:
     async def get_state(self) -> VehicleState:
         data = dict(self._states[self._index]["data"])
         data["provenance"] = Provenance.REPLAYED.value
-        data["recorded_provenance"] = self._original.value
+        # Each state carries the provenance it had when recorded. The header's value is
+        # only what was known when the file was opened, which can precede identification.
+        recorded = data.get("provenance") or self._original.value
+        if recorded == Provenance.REPLAYED.value:  # a recording of a replay
+            recorded = data.get("recorded_provenance") or self._original.value
+        data["recorded_provenance"] = recorded
         data["source"] = self.source
         data["received_at_unix_s"] = time.time()
         return VehicleState.model_validate(data)

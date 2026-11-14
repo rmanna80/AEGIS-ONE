@@ -30,6 +30,7 @@ KINDS = {
     "freeze": "Repeat the snapshot from the moment of injection.",
     "battery_drop": "Report the battery at to_fraction.",
     "clock_rewind": "Set the autopilot clock back by seconds.",
+    "link_drop": "Report the vehicle link as down (AEGIS's view only; the vehicle flies on).",
     "external_hold": "Hold commanded outside the operator's command path (simulator only).",
 }
 
@@ -81,6 +82,10 @@ class FaultInjector:
                 self._frozen = None
         if not self._active or not state.connected:
             return state
+        if "link_drop" in self._active:
+            return state.model_copy(
+                update={"connected": False, "injected_faults": tuple(sorted(self._active))}
+            )
         changes: dict[str, Any] = {}
         offset_east = offset_north = 0.0
         for kind, (request, start, _) in self._active.items():

@@ -7,6 +7,7 @@ const PROVENANCE_STYLE: Record<Provenance, string> = {
   simulated: "border-sim text-sim bg-sim/10",
   replayed: "border-replay text-replay bg-replay/10",
   physical: "border-crit text-crit bg-crit/10",
+  unknown: "border-warn text-warn bg-warn/10",
 };
 
 export function Header() {

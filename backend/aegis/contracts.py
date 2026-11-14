@@ -27,6 +27,8 @@ class Provenance(StrEnum):
     SIMULATED = "simulated"
     REPLAYED = "replayed"
     PHYSICAL = "physical"
+    # The source has not yet shown what it is. Never treated as simulated.
+    UNKNOWN = "unknown"
 
 
 class Severity(StrEnum):

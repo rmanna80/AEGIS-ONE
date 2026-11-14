@@ -42,6 +42,8 @@ from aegis.device import DeviceMonitor
 from aegis.faults import KINDS as FAULT_KINDS
 from aegis.faults import FaultInjector, FaultRequest
 from aegis.fleet import Fleet, route_conflicts, route_legs
+from aegis.hardware import inventory as hardware_inventory
+from aegis.hardware import operation_class
 from aegis.hub import TelemetryHub
 from aegis.interfaces import MissionExecutor, VehicleTelemetrySource
 from aegis.missions import (
@@ -52,6 +54,9 @@ from aegis.missions import (
     validate_mission,
 )
 from aegis.recording import FlightRecorder, RecordedTelemetryAdapter
+from aegis.replay.incidents import IncidentManager
+from aegis.replay.manifest import session_manifest, write_session_manifest
+from aegis.replay.timeline import build_timeline
 from aegis.sar.review import ReviewRequest
 from aegis.security import AuditLog, SecurityMonitor, posture
 from aegis.watchdog import StallWatchdog, system_snapshot
@@ -137,6 +142,16 @@ def build_navigation(
         return service, ""
     except (OSError, ValueError, RuntimeError, KeyError) as exc:
         return None, str(exc)
+
+
+class ReplayControl(BaseModel):
+    action: str
+    value: float | None = None
+
+
+class IncidentMark(BaseModel):
+    title: str = Field(default="", max_length=120)
+    note: str = Field(default="", max_length=500)
 
 
 class SarPlanRequest(BaseModel):
@@ -316,6 +331,10 @@ def create_app(
     hub.extra_checks.append(security.findings)
     device = DeviceMonitor(settings.data_dir)
     hub.extra_checks.append(device.findings)
+    session = session_manifest(
+        settings, device.snapshot, record_dir.name if record_dir is not None else "unrecorded"
+    )
+    incidents = IncidentManager(hub, record_dir, audit, session)
     anomaly = AnomalyMonitor(hub) if settings.anomaly else None
     if anomaly is not None:
         hub.extra_checks.append(anomaly.findings)
@@ -369,8 +388,11 @@ def create_app(
         nonlocal perception, perception_off_reason, navigation, navigation_off_reason
         log.info("System at start: %s", system_snapshot() or "n/a")
         await watchdog.start()
+        if record_dir is not None:
+            write_session_manifest(record_dir, session)
         await hub.start()
         await device.start()
+        await incidents.start()
         await fleet.start()
         if len(fleet.hubs) > 1:
             log.info("Fleet of %d vehicles: %s", len(fleet.hubs), ", ".join(fleet.ids))
@@ -423,6 +445,7 @@ def create_app(
                 await navigation.stop()
             if perception is not None:
                 await perception.stop()
+            await incidents.stop()
             await fleet.stop()
             await device.stop()
             await hub.stop()
@@ -432,6 +455,7 @@ def create_app(
     app.state.sar = sar
     app.state.fleet = fleet
     app.state.audit = audit
+    app.state.incidents = incidents
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origins,
@@ -484,6 +508,9 @@ def create_app(
             "vehicle_id": source.vehicle_id,
             "provenance": source.provenance.value,
             "source": getattr(source, "source", None),
+            # Which kind of operation this is, from the mode and from what the source
+            # has proved to be (see /api/hardware for the classes that do not exist).
+            "operation_class": operation_class(settings.mode.value, source.provenance),
             "commands_enabled": hub.executor is not None,
             "broadcast_hz": settings.broadcast_hz,
             # Changes on every backend start. An open dashboard reloads when it sees a new
@@ -683,6 +710,11 @@ def create_app(
 
     # ---------------------------------------------------- security and anomalies
 
+    @app.get("/api/hardware")
+    async def hardware() -> dict[str, Any]:
+        """Every adapter AEGIS has, the evidence behind each, and the operation classes."""
+        return hardware_inventory()
+
     @app.get("/api/device")
     async def device_status() -> dict[str, Any]:
         """Health of the computer running this backend (temperature, power, storage)."""
@@ -750,6 +782,10 @@ def create_app(
             except ValueError as exc:
                 raise HTTPException(422, str(exc)) from exc
         log.warning("FAULT INJECTED for testing: %s", request.kind)
+        if hub.recorder is not None:
+            hub.recorder.record_event(
+                "fault", {"kind": request.kind, "duration_s": request.duration_s}
+            )
         security.outcome("fault_injection", request.kind)
         return {"injected": request.kind, "active": faults.active()}
 
@@ -758,6 +794,95 @@ def create_app(
         require_injector().clear()
         security.outcome("fault_injection", "cleared")
         return {"active": []}
+
+    # --------------------------------------------------------------------- replay
+
+    @app.get("/api/replay/session")
+    async def replay_session() -> dict[str, Any]:
+        """Which software, configuration and device are producing this session's records."""
+        return session
+
+    @app.get("/api/replay/timeline")
+    async def replay_timeline() -> dict[str, Any]:
+        """Event markers of the recording being played back (replay mode only)."""
+        source = hub.source
+        if not isinstance(source, RecordedTelemetryAdapter):
+            raise HTTPException(
+                409, "No recording is being played back (start with AEGIS_MODE=replay)."
+            )
+        return {
+            "recording": source.source,
+            "start_s": source.start_s,
+            "duration_s": source.duration_s,
+            "position_s": source.playback_time_s,
+            "paused": source.paused,
+            "speed": source.speed,
+            "incident_id": source.header.get("incident_id"),
+            "recorded_software": None,
+            "events": build_timeline(source.records),
+            "note": "Playback of recorded data. Not a re-run of the software and not a "
+            "deterministic reproduction of the event.",
+        }
+
+    @app.post("/api/replay/control")
+    async def replay_control(request: ReplayControl) -> dict[str, Any]:
+        """Pause, resume, seek or change speed of a playback. Touches no vehicle."""
+        source = hub.source
+        if not isinstance(source, RecordedTelemetryAdapter):
+            raise HTTPException(409, "No recording is being played back.")
+        try:
+            if request.action == "pause":
+                source.paused = True
+            elif request.action == "play":
+                source.paused = False
+                if source.playback_time_s >= source.duration_s:
+                    source.seek(source.start_s)
+            elif request.action == "seek":
+                source.seek(float(request.value or 0.0))
+            elif request.action == "speed":
+                source.set_speed(float(request.value or 1.0))
+            else:
+                raise HTTPException(422, "action must be play, pause, seek or speed")
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from exc
+        return {
+            "position_s": source.playback_time_s,
+            "paused": source.paused,
+            "speed": source.speed,
+        }
+
+    @app.get("/api/incidents")
+    async def incident_list() -> dict[str, Any]:
+        return {"enabled": incidents.enabled, "incidents": incidents.incidents}
+
+    @app.post("/api/incidents")
+    async def incident_mark(request: IncidentMark, _: MissionExecutor = operator) -> dict[str, Any]:
+        """Operator marks an incident now, so the surrounding record is preserved."""
+        incident = incidents.mark(request.title, request.note)
+        if incident is None:
+            raise HTTPException(409, "Nothing is being recorded, so there is nothing to preserve.")
+        security.outcome("incident_mark", "opened", incident_id=incident["incident_id"])
+        return {"incident": incident}
+
+    @app.get("/api/incidents/{incident_id}")
+    async def incident_get(incident_id: str) -> dict[str, Any]:
+        summary = incidents.get(incident_id)
+        if summary is None:
+            raise HTTPException(404, f"No incident {incident_id}.")
+        document = await asyncio.to_thread(incidents.document, incident_id)
+        return {"summary": summary, **(document or {})}
+
+    @app.get("/api/incidents/{incident_id}/export")
+    async def incident_export(incident_id: str) -> Response:
+        """The incident package as a zip, manifest included."""
+        archive = await asyncio.to_thread(incidents.export_zip, incident_id)
+        if archive is None:
+            raise HTTPException(404, f"No packaged incident {incident_id}.")
+        return Response(
+            content=archive,
+            media_type="application/zip",
+            headers={"Content-Disposition": f'attachment; filename="{incident_id}.zip"'},
+        )
 
     # ---------------------------------------------------------------------- fleet
 
