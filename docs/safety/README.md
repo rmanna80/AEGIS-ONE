@@ -85,9 +85,32 @@ AEGIS cannot guarantee collision avoidance, in simulation or anywhere else.
 | Obstacle on the route | Live against PX4 SITL | `route.blocked` critical, Hold commanded, stopped 11.7 m short |
 | IMU anomalies | Not applicable yet | Phase 6 |
 
-## Before any hardware is connected (Phase 8, not started)
+## Before any hardware is connected
 
-Simulation results do not transfer automatically. Hardware work requires, at minimum: a separate
-hardware adapter and configuration, bench tests with propellers removed, a manual-override
-(RC) path that does not depend on AEGIS, PX4 failsafes configured and tested on the airframe,
-compliance with local aviation rules, and a written operator checklist.
+Simulation results do not transfer automatically. The current gating, the interface
+inventory and the list of what is missing are in
+[docs/hardware/README.md](../hardware/README.md). In short:
+
+- Physical flight control does not exist in this software and cannot be switched on by
+  configuration. `AEGIS_MODE=physical` stops the backend at start-up.
+- Data is labelled `simulated` only after the autopilot proves it is a simulator. An
+  autopilot that answers without that proof is labelled `physical` and can never be
+  commanded by that process.
+- Hardware-in-the-loop is treated like flight, not like simulation, and is not implemented.
+- Fault injection only works against an attested simulator and only alters AEGIS's copy of
+  the data.
+
+Hardware work requires, at minimum: a separate hardware adapter and configuration, bench
+tests with propellers removed, a manual-override (RC) path that does not depend on AEGIS,
+PX4 failsafes configured and tested on the airframe, compliance with local aviation rules,
+and a written operator checklist. Physical flight tests must be separately planned,
+authorised and supervised.
+
+## What the test and evidence tools do not claim
+
+- A TRUST scenario passing shows one behaviour under one set of conditions. It is not a
+  safety certification, and AEGIS provides no regulatory certification of any kind.
+- There is no overall trust or safety score. One failed criterion fails a scenario.
+- An incident package's hash shows the files are unchanged. It says nothing about whether
+  the measurements were accurate.
+- Incident packages never state a root cause.

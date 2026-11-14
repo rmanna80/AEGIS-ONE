@@ -142,7 +142,7 @@ class RecordedTelemetryAdapter:
         self.paused = False
         self.duration_s = float(self._states[-1]["t"])
         self._index = 0
-        self.playback_time_s = 0.0
+        self.playback_time_s = self.start_s
         self.finished = False
         self._task: asyncio.Task[None] | None = None
 
@@ -164,7 +164,6 @@ class RecordedTelemetryAdapter:
 
     async def _play(self) -> None:
         """Advance a playback clock; the state shown is the last one at or before it."""
-        self.playback_time_s = self.start_s
         last = time.monotonic()
         while True:
             await asyncio.sleep(0.05)
@@ -201,10 +200,10 @@ class RecordedTelemetryAdapter:
 
     async def get_state(self) -> VehicleState:
         data = dict(self._states[self._index]["data"])
-        data["provenance"] = Provenance.REPLAYED.value
         # Each state carries the provenance it had when recorded. The header's value is
         # only what was known when the file was opened, which can precede identification.
         recorded = data.get("provenance") or self._original.value
+        data["provenance"] = Provenance.REPLAYED.value
         if recorded == Provenance.REPLAYED.value:  # a recording of a replay
             recorded = data.get("recorded_provenance") or self._original.value
         data["recorded_provenance"] = recorded

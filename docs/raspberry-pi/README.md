@@ -168,3 +168,17 @@ has the install and removal commands.
   makes it reachable by anyone on the network over plain HTTP, with the operator token as
   the only protection. The Security section flags it.
 - The Pi's clock comes from the network. Recordings made while it is wrong carry wrong times.
+
+## Measuring the Pi during a flight
+
+`scripts/pi_benchmark.py` times each workload alone. To measure the Pi while it is flying a
+simulated vehicle (CPU, memory, temperature, loop lag, telemetry arrival rate, network
+round trip, and camera frame rate and detection time when perception is on):
+
+```bash
+.venv/bin/python scripts/edge_measure.py --seconds 90 --peer <PC address>
+```
+
+Run it while a demo is in flight. The full procedure, and the list of what has and has not
+been verified on the Pi, is in [docs/hardware/README.md](../hardware/README.md), section 3.
+

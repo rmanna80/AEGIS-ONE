@@ -1,0 +1,24 @@
+{
+  "created_utc_s": 1794691009.573,
+  "description": "AEGIS incident INC-20261114T161635-01",
+  "files": {
+    "audit_excerpt.jsonl": {
+      "bytes": 783,
+      "sha256": "d0b0303bacd4cf0fa7de0be7a80aec1369656078a23424f9ed02fd4fed8fd258"
+    },
+    "events.jsonl": {
+      "bytes": 451358,
+      "sha256": "557bdc22ecb4f8c8c45691b797bc6cc9f4c7e63f793b9407911382a0ea9357e5"
+    },
+    "incident.json": {
+      "bytes": 2799,
+      "sha256": "ce83e535c5d61476ef7886c942d17c08878f9e136cc82a4a63127c0a58468ce7"
+    },
+    "session.json": {
+      "bytes": 2878,
+      "sha256": "0ed543b7dc79e37bab2006f09b564111b51fab2d2951de6b773297e6817d5e1c"
+    }
+  },
+  "hash_algorithm": "sha256",
+  "schema": "aegis.evidence-manifest/1"
+}

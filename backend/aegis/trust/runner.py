@@ -250,6 +250,12 @@ class Runner:
                 incident_manifest_sha256=incident.get("manifest_sha256"),
                 incident_completeness=detail["incident"]["completeness"],
             )
+        completeness = evidence.get("incident_completeness") or {}
+        measurements["incident_state_record_fraction"] = completeness.get("fraction_of_expected")
+        measurements["incident_seconds_without_records"] = completeness.get(
+            "seconds_without_state_records"
+        )
+        measurements["incident_seconds_without_link"] = completeness.get("seconds_without_link")
         measurements["incident_packaged"] = (
             incident is not None and incident["status"] == "packaged"
         )

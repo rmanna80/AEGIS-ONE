@@ -8,6 +8,7 @@ Run with::
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import hmac
 import json
 import logging
@@ -810,6 +811,11 @@ def create_app(
             raise HTTPException(
                 409, "No recording is being played back (start with AEGIS_MODE=replay)."
             )
+        software = None
+        session_file = source.path.parent / "session.json"
+        if session_file.is_file():
+            with contextlib.suppress(ValueError):
+                software = json.loads(session_file.read_text()).get("software")
         return {
             "recording": source.source,
             "start_s": source.start_s,
@@ -818,7 +824,7 @@ def create_app(
             "paused": source.paused,
             "speed": source.speed,
             "incident_id": source.header.get("incident_id"),
-            "recorded_software": None,
+            "recorded_software": software,
             "events": build_timeline(source.records),
             "note": "Playback of recorded data. Not a re-run of the software and not a "
             "deterministic reproduction of the event.",

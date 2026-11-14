@@ -382,3 +382,47 @@ export interface SecurityStatus {
     throttled: string[] | null;
   };
 }
+
+// --- AEGIS REPLAY (mirrors backend/aegis/replay).
+
+export interface TimelineEvent {
+  t: number;
+  kind: "alert" | "mission" | "fault" | "link" | "gap" | "search";
+  label: string;
+  detail: string;
+  severity?: "info" | "warning" | "critical";
+}
+
+export interface ReplayTimeline {
+  recording: string;
+  start_s: number;
+  duration_s: number;
+  position_s: number;
+  paused: boolean;
+  speed: number;
+  incident_id: string | null;
+  recorded_software: { git_commit?: string | null; aegis_version?: string } | null;
+  events: TimelineEvent[];
+  note: string;
+}
+
+export interface ReplayPosition {
+  position_s: number;
+  paused: boolean;
+  speed: number;
+}
+
+export interface IncidentSummary {
+  incident_id: string;
+  title: string;
+  note: string;
+  trigger: string;
+  status: "open" | "packaging" | "packaged" | "failed";
+  opened_utc_s: number;
+  alert_codes: string[];
+  seconds?: number;
+  files?: number;
+  manifest_sha256?: string;
+  folder?: string;
+  error?: string;
+}

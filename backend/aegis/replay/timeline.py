@@ -11,6 +11,12 @@ def build_timeline(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
     events: list[dict[str, Any]] = []
     faults: tuple[str, ...] = ()
     previous_state_t: float | None = None
+    connected = True
+    mission_label = ""
+    announced: dict[str, list[float]] = {}
+    for record in records:
+        if record["kind"] == "fault":
+            announced.setdefault(str(record["data"].get("kind")), []).append(float(record["t"]))
     for record in records:
         t, kind, data = float(record["t"]), record["kind"], record["data"]
         if kind == "alert":
@@ -24,14 +30,15 @@ def build_timeline(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 }
             )
         elif kind == "mission":
-            events.append(
-                {
-                    "t": t,
-                    "kind": "mission",
-                    "label": f"mission {data['phase']}",
-                    "detail": data.get("message", ""),
-                }
-            )
+            label = f"mission {data['phase']}"
+            done, total = data.get("current_waypoint"), data.get("total_waypoints")
+            if data["phase"] == "active" and done is not None and total:
+                label = f"mission active, {done} of {total} waypoints reached"
+            if label != mission_label:  # the same status re-recorded is not an event
+                events.append(
+                    {"t": t, "kind": "mission", "label": label, "detail": data.get("message", "")}
+                )
+                mission_label = label
         elif kind == "fault":
             events.append(
                 {
@@ -57,13 +64,31 @@ def build_timeline(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
                         "t": previous_state_t,
                         "kind": "gap",
                         "label": f"no vehicle data for {t - previous_state_t:.1f} s",
-                        "detail": "State is recorded only while the vehicle link is up.",
+                        "detail": "Nothing was recorded here: the recorder was not running.",
                     }
                 )
             previous_state_t = t
+            link = bool(data.get("connected", True))
+            if link != connected:
+                events.append(
+                    {
+                        "t": t,
+                        "kind": "link",
+                        "label": "vehicle link restored" if link else "vehicle link lost",
+                        "detail": ""
+                        if link
+                        else "Records until the link returns hold the last values received.",
+                    }
+                )
+                connected = link
             now = tuple(data.get("injected_faults") or ())
             if now != faults:
-                started = sorted(set(now) - set(faults))
+                # A fault the operator's request already announced is not listed twice.
+                started = sorted(
+                    k
+                    for k in set(now) - set(faults)
+                    if all(abs(t - at) > 2.0 for at in announced.get(k, []))
+                )
                 ended = sorted(set(faults) - set(now))
                 if started:
                     events.append(

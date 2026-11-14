@@ -8,9 +8,9 @@ are a record of what was observed, not a guarantee.
 
 | Suite | Command | Result |
 | --- | --- | --- |
-| Backend unit + API + perception + navigation + search + fleet + security + device | `pytest` | 207 passed, 1 skipped here (the SITL tests are collected separately) |
+| Backend unit + API + perception + navigation + search + fleet + security + device + hardware + replay + trust | `pytest` | 241 passed, 1 skipped (2026-11-14; the SITL tests are collected separately) |
 | Lint | `ruff check . && ruff format --check .` | clean |
-| Types | `mypy` (strict) | no issues in 40 source files |
+| Types | `mypy` (strict) | no issues in 49 source files |
 | Frontend unit | `cd frontend && npm test` | 9 passed |
 | Frontend build | `cd frontend && npm run build` | type-checks and builds |
 | Live simulation | `AEGIS_SITL_TESTS=1 pytest tests/simulation -v` | 2 passed in 145 s |
@@ -396,6 +396,36 @@ Two failures on the way, both fixed:
 Still unverified on the Pi: Demos 2, 4, 5 and 6, object detection during a flight, sustained
 temperature, the dashboard through the SSH tunnel beyond opening it, the
 systemd unit, and Gazebo with the Pi in the loop.
+
+## Hardware readiness, REPLAY and TRUST (Phases 8 to 10, measured 2026-11-14)
+
+Development machine (x86, 2 vCPU, 8 GB), PX4 v1.17.0 SITL, built-in simulator.
+
+| What | Command | Result |
+| --- | --- | --- |
+| Link-loss scenario | `python scripts/trust_run.py --token ... trust/scenarios/link_loss_detection.json` | PASS, 7 of 7 criteria, 100 s. `link.lost` after 0.20 s, cleared 0.26 s after the link returned |
+| Stale-telemetry scenario | `... trust/scenarios/stale_telemetry_detection.json` | PASS, 7 of 7 criteria, 111 s. `telemetry.frozen` after 2.22 s |
+| Incident package from the link-loss run | `python scripts/incident_tool.py verify <folder>` | VALID, 4 files; 29 s window, 290 of 290 expected records, 6.0 s of them without a link |
+| Replay of that package | `AEGIS_MODE=replay AEGIS_REPLAY_FILE=.../events.jsonl bash scripts/run_backend.sh` | Timeline of 8 events; paused at 17 s: link down, fault labelled, `link.lost` shown as `replayed`; seek, 4x speed and pause behaved; out-of-range speed and unknown action refused; commands 403 |
+| Replay bar in a browser (headless Chromium) | | 4 marker groups, jump-to-event and play worked, no page errors |
+| Demo 1 after these changes | `python scripts/demo1_survey.py --token ...` | 5 of 5 |
+| Demo 6 after these changes | `python scripts/demo6_security.py --token ...` | 8 of 8 |
+| Edge measurement script | `python scripts/edge_measure.py --seconds 45` during Demo 1 | Ran on x86: CPU 11.5% median, loop lag 2 ms worst, autopilot data 9.94 updates per second, longest silence 200 ms. **Not yet run on the Pi** |
+
+Runs that did not pass, and the seven defects they exposed, are listed in
+`docs/trust/README.md` and `docs/ASSESSMENT.md`.
+
+Unit tests added: `test_hardware.py` (provenance by evidence, a non-simulator cannot be
+commanded, operation classes, adapter inventory), `test_replay.py` (manifest tampering
+including a rewritten manifest, incident open/close/package, export/import, path-escaping
+archives refused, slice and timeline, pause/seek/speed, the shipped sample package),
+`test_trust.py` (scenario validation, verdict rules, the runner against a scripted backend:
+pass, missed detection, late detection, missing evidence, early alert, and five
+environments it must refuse).
+
+Not tested: any of this on the Raspberry Pi; incidents during a fleet or a camera session;
+a recording of a physical vehicle (none exists); the physical-monitoring path against a
+real autopilot.
 
 ## Not tested yet
 

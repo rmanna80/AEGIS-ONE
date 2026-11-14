@@ -190,14 +190,15 @@ class TelemetryHub:
                 "" if alert.active else " (cleared)",
             )
 
-        if self.recorder is not None and state.connected:
-            if not self._recording_open:
-                source = getattr(self.source, "source", state.source)
-                self.recorder.open(state.vehicle_id, state.provenance, source)
-                self._recording_open = True
-                log.info("Recording flight to %s", self.recorder.path)
-            self.recorder.record_state(state)
+        if self.recorder is not None and state.connected and not self._recording_open:
+            source = getattr(self.source, "source", state.source)
+            self.recorder.open(state.vehicle_id, state.provenance, source)
+            self._recording_open = True
+            log.info("Recording flight to %s", self.recorder.path)
         if self.recorder is not None and self._recording_open:
+            # Recorded while the link is down too: "AEGIS had no link" is itself
+            # evidence, and a silent gap could not be told apart from a recorder fault.
+            self.recorder.record_state(state)
             # Alerts are recorded even while the link is down - that is when they matter.
             for alert in changed:
                 self.recorder.record_event("alert", alert.model_dump(mode="json"))

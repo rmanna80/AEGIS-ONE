@@ -10,6 +10,7 @@ const PROVENANCE_TONE: Record<Provenance, string> = {
   simulated: "border-sim text-sim",
   replayed: "border-replay text-replay",
   physical: "border-crit text-crit",
+  unknown: "border-warn text-warn",
 };
 
 function colourFor(trackId: number): string {

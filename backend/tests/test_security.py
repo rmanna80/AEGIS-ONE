@@ -135,6 +135,17 @@ def test_battery_that_rises_or_plunges_is_flagged() -> None:
     assert "battery.implausible" in plunging.raised()
 
 
+def test_battery_recharged_between_flights_is_not_a_rise_in_flight() -> None:
+    """Found by the TRUST stale-telemetry scenario run after another flight: the
+    simulator's battery recovers on the ground, and the next take-off looked like a rise."""
+    flight = Flight()
+    flight.fly(2.0, battery=BatteryState(voltage_v=14.0, remaining_fraction=0.5))
+    flight.fly(1.0, in_air=False, battery=BatteryState(voltage_v=14.0, remaining_fraction=0.5))
+    flight.fly(1.0, in_air=False, battery=BatteryState(voltage_v=16.0, remaining_fraction=0.98))
+    flight.fly(2.0, battery=BatteryState(voltage_v=16.0, remaining_fraction=0.97))
+    assert "battery.implausible" not in flight.raised()
+
+
 def test_off_route_only_counts_while_flying_the_mission() -> None:
     flight = Flight()
     flight.fly(2.0)

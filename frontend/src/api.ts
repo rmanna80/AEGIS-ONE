@@ -1,10 +1,13 @@
 import type {
   FleetSearchPlan,
+  IncidentSummary,
   MapPayload,
   Mission,
   MissionStatus,
   NavigationStatus,
   PerceptionStatus,
+  ReplayPosition,
+  ReplayTimeline,
   ReviewStatus,
   SarCandidate,
   SarPlan,
@@ -92,6 +95,13 @@ export const api = {
     post<unknown>(`/api/fleet/${encodeURIComponent(vehicleId)}/${command}`, undefined, token),
   fleetHoldAll: (token: string) =>
     post<{ results: Record<string, string> }>("/api/fleet/hold-all", undefined, token),
+  replayTimeline: () => request<ReplayTimeline>("/api/replay/timeline"),
+  replayControl: (action: "play" | "pause" | "seek" | "speed", value?: number) =>
+    post<ReplayPosition>("/api/replay/control", { action, value }),
+  incidents: () =>
+    request<{ enabled: boolean; incidents: IncidentSummary[] }>("/api/incidents"),
+  markIncident: (title: string, note: string, token: string) =>
+    post<{ incident: IncidentSummary }>("/api/incidents", { title, note }, token),
   hold: (token: string) => post<unknown>("/api/vehicle/hold", undefined, token),
   returnHome: (token: string) => post<unknown>("/api/vehicle/return", undefined, token),
   land: (token: string) => post<unknown>("/api/vehicle/land", undefined, token),

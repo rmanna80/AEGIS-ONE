@@ -3,9 +3,11 @@ import { api } from "./api";
 import { AlertsPanel } from "./components/AlertsPanel";
 import { Charts } from "./components/Charts";
 import { Header } from "./components/Header";
+import { IncidentsPanel } from "./components/IncidentsPanel";
 import { FleetPanel } from "./components/FleetPanel";
 import { MissionPanel } from "./components/MissionPanel";
 import { Overview } from "./components/Overview";
+import { ReplayBar } from "./components/ReplayBar";
 import { SecurityPanel } from "./components/SecurityPanel";
 import { SearchPanel } from "./components/SearchPanel";
 import { useStore } from "./state/store";
@@ -23,6 +25,7 @@ export default function App() {
   const setSar = useStore((s) => s.setSar);
   const sarEnabled = useStore((s) => Boolean(s.sar?.enabled));
   const fleetOn = useStore((s) => (s.snapshot?.fleet?.length ?? 0) > 0);
+  const replaying = useStore((s) => s.system?.mode === "replay");
   const perceptionEnabled = useStore((s) => Boolean(s.perception?.enabled));
 
   useEffect(() => {
@@ -132,6 +135,7 @@ export default function App() {
               </div>
             )}
           </div>
+          {replaying && <ReplayBar />}
           <div className="h-44 shrink-0 border-t border-line bg-ink-900">
             <Charts />
           </div>
@@ -142,6 +146,7 @@ export default function App() {
           <MissionPanel />
           {sarEnabled && <SearchPanel />}
           <AlertsPanel />
+          <IncidentsPanel />
           <SecurityPanel />
         </aside>
       </div>

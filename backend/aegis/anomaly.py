@@ -89,6 +89,7 @@ class AnomalyMonitor:
         self.limits = limits or AnomalyLimits()
         self._samples: deque[_Sample] = deque()
         self._battery: deque[tuple[float, float]] = deque()
+        self._battery_in_air = False
         self._last_state: VehicleState | None = None
         self._last_change_wall = 0.0
         self._prev_mode: str | None = None
@@ -212,6 +213,12 @@ class AnomalyMonitor:
         # --- battery
         if state.battery is not None and state.battery.remaining_fraction is not None:
             level = state.battery.remaining_fraction
+            if state.in_air and not self._battery_in_air:
+                # A new flight: a battery changed or recharged on the ground is not a
+                # level that "rose in flight". Found by the TRUST stale-telemetry
+                # scenario, run straight after another flight.
+                self._battery.clear()
+            self._battery_in_air = bool(state.in_air)
             self._battery.append((now, level))
             while self._battery and now - self._battery[0][0] > limits.battery_window_s:
                 self._battery.popleft()

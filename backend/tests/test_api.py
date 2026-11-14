@@ -207,7 +207,10 @@ async def test_hub_raises_and_clears_alert_on_injected_fault(tmp_path: Path) -> 
     recorder.close()
     _, records = load_recording(tmp_path / "flight.jsonl")
     kinds = [r["kind"] for r in records]
-    assert kinds.count("state") == 3  # nothing is recorded while the link is down
+    # The tick without a link is recorded too, marked as such: a silent gap could
+    # not be told apart from a recorder fault.
+    states = [r["data"] for r in records if r["kind"] == "state"]
+    assert [s["connected"] for s in states] == [True, True, False, True]
     assert kinds.count("alert") >= 3
 
 

@@ -38,11 +38,14 @@ def slice_flight_log(
     what they contain. The header is kept so the slice replays on its own."""
     lines: list[str] = []
     states = 0
+    no_link = 0
+    no_link_s = 0.0
     alerts: list[dict[str, Any]] = []
     missions: list[dict[str, Any]] = []
     faults: set[str] = set()
     gaps: list[dict[str, float]] = []
     previous_state_t: float | None = None
+    mission_before: dict[str, Any] | None = None
     first_utc = last_utc = None
     first_vehicle = last_vehicle = None
     with flight_log.open(encoding="utf-8") as handle:
@@ -60,8 +63,21 @@ def slice_flight_log(
                 lines.append(json.dumps(record, separators=(",", ":")))
                 continue
             t = float(record["t"])
+            if t < start_s and record["kind"] == "mission":
+                mission_before = record  # in force when the window opens
             if t < start_s or t > end_s:
                 continue
+            if mission_before is not None:
+                # Without this the replay would show no mission until its next change.
+                carried = {
+                    **mission_before,
+                    "t_session": mission_before["t"],
+                    "t": 0.0,
+                    "carried_from_before_the_window": True,
+                }
+                lines.append(json.dumps(carried, separators=(",", ":")))
+                missions.append({"t": 0.0, "phase": mission_before["data"]["phase"]})
+                mission_before = None
             record["t_session"] = t
             record["t"] = round(t - start_s, 4)
             lines.append(json.dumps(record, separators=(",", ":")))
@@ -79,6 +95,10 @@ def slice_flight_log(
                             "seconds": round(t - previous_state_t, 2),
                         }
                     )
+                if not record["data"].get("connected", True):
+                    no_link += 1
+                    if previous_state_t is not None:
+                        no_link_s += min(t - previous_state_t, GAP_S)
                 previous_state_t = t
                 faults.update(record["data"].get("injected_faults") or [])
                 vehicle = record["data"].get("vehicle_time_s")
@@ -102,6 +122,8 @@ def slice_flight_log(
                 faults.add(str(record["data"].get("kind")))
     summary = {
         "state_records": states,
+        "state_records_without_link": no_link,
+        "seconds_without_link": round(no_link_s, 2),
         "alerts": alerts,
         "mission_phases": missions,
         "injected_faults_seen": sorted(faults),
@@ -296,8 +318,10 @@ class IncidentManager:
                     "fraction_of_expected": round(summary["state_records"] / max(1.0, expected), 3),
                     "gaps_in_state_records": summary["gaps_in_state_records"],
                     "seconds_without_state_records": round(gap_seconds, 2),
-                    "note": "State is recorded only while the vehicle link is up, so a link "
-                    "loss appears as a gap.",
+                    "state_records_without_link": summary["state_records_without_link"],
+                    "seconds_without_link": summary["seconds_without_link"],
+                    "note": "A record without a link holds the last values AEGIS had, "
+                    "marked connected=false; it is not a measurement of the vehicle.",
                 },
                 "not_in_this_package": {
                     "kept_in_the_session_folder": kept_elsewhere,

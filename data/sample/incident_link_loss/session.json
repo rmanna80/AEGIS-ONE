@@ -1,0 +1,87 @@
+{
+  "schema": "aegis.session/1",
+  "session_id": "20261114T161557",
+  "software": {
+    "aegis_version": "0.1.0",
+    "git_commit": "c442125cd33f64dc2f3aa5d4b2b8a0cb7bb9a22e",
+    "git_uncommitted_changes": true,
+    "python": "3.12.3",
+    "platform": "Linux-6.18.44-fc-v470-x86_64-with-glibc2.39"
+  },
+  "device": {
+    "model": null,
+    "machine": "x86_64",
+    "cpu_count": 2,
+    "hostname_sha256": "5bce98f73f3ed0c8"
+  },
+  "configuration": {
+    "mode": "simulation",
+    "vehicle_id": "sim-1",
+    "px4_url": "udpin://127.0.0.1:14540",
+    "mavsdk_grpc_port": 50051,
+    "replay_file": "/home/claude/aegis-one/data/sample/demo1_survey_sih.jsonl",
+    "replay_speed": 1.0,
+    "record_flights": true,
+    "data_dir": "/home/claude/aegis-one/data/generated",
+    "scenario": "open_field",
+    "scenario_file": null,
+    "replay_session": null,
+    "frontend_dist": "/home/claude/aegis-one/frontend/dist",
+    "camera": "none",
+    "camera_stream_host": "127.0.0.1",
+    "camera_stream_port": 5600,
+    "detector_model": "/home/claude/aegis-one/models/yolo11n.onnx",
+    "detector_confidence": 0.35,
+    "detector_labels": [],
+    "detector_threads": 0,
+    "depth": "none",
+    "depth_stream_port": 5601,
+    "depth_hfov_deg": 73.0,
+    "depth_max_range_m": 19.0,
+    "map_resolution_m": 0.5,
+    "nav_clearance_m": 3.0,
+    "nav_use_prior_map": true,
+    "nav_auto_hold": true,
+    "nav_load_map": null,
+    "thermal": "none",
+    "thermal_hfov_deg": 57.0,
+    "thermal_min_delta_c": 5.0,
+    "sar_altitude_m": 25.0,
+    "sar_overlap": 0.2,
+    "fleet_size": 1,
+    "fleet_auto_hold": true,
+    "anomaly": true,
+    "fault_injection": true,
+    "host": "127.0.0.1",
+    "broadcast_hz": 10.0,
+    "cors_origins": [
+      "http://localhost:5173",
+      "http://127.0.0.1:5173"
+    ]
+  },
+  "configuration_note": "The operator token is never written to a manifest.",
+  "scenario": {
+    "id": "open_field",
+    "file_sha256": "79a3f1aee782a2d024efe88797c60d55ba6db854a3255e9e5bd87fe597cf9fa2"
+  },
+  "detector_model": {
+    "file": "yolo11n.onnx",
+    "sha256": "634279b40c07c6391472c51ad45b81ebc48706a9a1fe72dd3396322acd0c053b"
+  },
+  "clocks": {
+    "started_utc_s": 1794690957.229,
+    "started_monotonic_s": 2744.021,
+    "utc_synchronised": null,
+    "domains": {
+      "t": "seconds on this computer's monotonic clock since the recording opened",
+      "utc": "this computer's wall clock (UTC, seconds); only as good as its synchronisation, see utc_synchronised",
+      "vehicle_time_s": "the autopilot's own clock inside each state: simulation time in a simulator, time since boot on hardware"
+    },
+    "note": "The three clocks are recorded side by side and never converted into one another. No offset between this computer and another device is measured."
+  },
+  "record_schemas": {
+    "flight_log": 1,
+    "audit_log": 1,
+    "session": "aegis.session/1"
+  }
+}

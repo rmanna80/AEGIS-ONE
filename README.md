@@ -269,6 +269,40 @@ AEGIS_MODE=replay AEGIS_REPLAY_SESSION=latest AEGIS_SCENARIO=urban bash scripts/
 
 `AEGIS_REPLAY_SPEED=4` plays faster. `curl -s localhost:8000/api/recordings` lists sessions.
 
+In replay mode the dashboard shows a bar with play/pause, a scrub bar, speed, and markers
+for alerts, injected faults and link changes.
+
+## Incidents and evidence (AEGIS REPLAY)
+
+On any critical alert, or when the operator presses "Mark incident", the backend preserves
+the record around the event as a package: the flight-log slice, the audit records, the
+session manifest and a SHA-256 manifest. A sample captured from a live simulated flight is
+included:
+
+```bash
+python scripts/incident_tool.py verify data/sample/incident_link_loss
+AEGIS_MODE=replay AEGIS_REPLAY_FILE=data/sample/incident_link_loss/events.jsonl bash scripts/run_backend.sh
+```
+
+Playback shows what was recorded; it is not a re-run of the software. Verification shows
+the files are unchanged, not that the measurements were right. Details and limits:
+[docs/replay/README.md](docs/replay/README.md).
+
+## Scenario tests (AEGIS TRUST)
+
+```bash
+bash scripts/run_px4.sh sih                                      # terminal 1
+AEGIS_FAULT_INJECTION=true bash scripts/run_backend.sh           # terminal 2
+python scripts/trust_run.py --token <token> trust/scenarios/link_loss_detection.json
+python scripts/trust_run.py --token <token> trust/scenarios/stale_telemetry_detection.json
+```
+
+Each flies the demo mission, injects one fault into AEGIS's copy of the telemetry, and
+gives every criterion PASS, FAIL or INCONCLUSIVE with the measurement. One failed criterion
+fails the scenario; there is no overall score. These are tests written and run by the
+developers on a simulator, not a safety certification:
+[docs/trust/README.md](docs/trust/README.md).
+
 ## Demo 1: Autonomous survey
 
 ```bash
@@ -300,8 +334,12 @@ AEGIS_SITL_TESTS=1 pytest tests/simulation -v
 | `replay` | Recorded flight | None (read-only) |
 | `physical` | n/a | Rejected at startup. Physical flight is a separately gated future milestone. |
 
-Every state, alert and recording carries its provenance (`simulated`, `replayed`, `physical`),
-and the dashboard shows it in the header at all times.
+Every state, alert and recording carries its provenance (`simulated`, `replayed`, `physical`,
+or `unknown` until the autopilot has identified itself), and the dashboard shows it in the
+header at all times. Data is `simulated` only once the autopilot has proved it is a
+simulator. What each hardware interface has actually been tested against:
+[docs/hardware/README.md](docs/hardware/README.md). What is and is not verified overall:
+[docs/ASSESSMENT.md](docs/ASSESSMENT.md).
 
 ## Repository layout
 
@@ -318,14 +356,20 @@ backend/aegis/          Python package
   api.py                FastAPI REST + WebSocket
   perception/           optional: cameras, ONNX detector, tracker, metrics, pipeline
   navigation/           optional: depth sensing, occupancy map, route checker, A* planner
+  sar/ fleet.py         thermal search, multi-vehicle coordination
+  anomaly.py security.py faults.py   anomaly checks, audit log, labelled fault injection
+  hardware.py           interface inventory and operation classes
+  replay/               session manifest, incident packages, timeline (AEGIS REPLAY)
+  trust/                scenario contracts and runner (AEGIS TRUST)
+trust/scenarios/        scenario files
 backend/tests/          unit and API tests
 tests/simulation/       tests that need a live PX4 SITL
 frontend/               React + TypeScript + React Three Fiber dashboard
 simulation/scenarios/   environment + demo mission (single source of truth)
 simulation/gazebo/      generated Gazebo world
 scripts/                setup, launch, demo and generator scripts
-data/sample/            a real recorded SITL flight for replay mode
-docs/                   architecture, simulation, safety, testing, roadmap
+data/sample/            a recorded SITL flight, a sample incident package, sample TRUST results
+docs/                   assessment, architecture, hardware, replay, trust, simulation, safety, testing, roadmap
 ```
 
 This is flatter than the structure suggested in the brief: directories are added when their

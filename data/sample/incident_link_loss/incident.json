@@ -1,0 +1,95 @@
+{
+  "schema": "aegis.incident/1",
+  "incident_id": "INC-20261114T161635-01",
+  "title": "Critical alert: link.lost",
+  "note": "",
+  "trigger": "critical alert",
+  "opened_utc_s": 1794690995.549,
+  "opened_t_s": 37.112,
+  "alert_codes": [
+    "link.lost"
+  ],
+  "closed_t_s": 51.118,
+  "closed_utc_s": 1794691009.555,
+  "closed_because": "critical alerts cleared",
+  "window": {
+    "recording_start_s": 22.112,
+    "recording_end_s": 51.118,
+    "seconds": 29.01,
+    "seconds_kept_before_the_trigger": 15.0,
+    "utc_start_s": 1794690980.637,
+    "utc_end_s": 1794691009.538,
+    "vehicle_time_start_s": 2190.324,
+    "vehicle_time_end_s": 2218.884
+  },
+  "alerts": [
+    {
+      "t": 14.5883,
+      "code": "link.lost",
+      "severity": "critical",
+      "active": true,
+      "message": "No link to the vehicle."
+    },
+    {
+      "t": 20.588,
+      "code": "link.lost",
+      "severity": "critical",
+      "active": false,
+      "message": "No link to the vehicle."
+    }
+  ],
+  "mission_phases": [
+    {
+      "t": 0.0,
+      "phase": "active"
+    },
+    {
+      "t": 16.7887,
+      "phase": "active"
+    },
+    {
+      "t": 27.5873,
+      "phase": "active"
+    }
+  ],
+  "injected_faults_seen": [
+    "link_drop"
+  ],
+  "completeness": {
+    "state_records": 290,
+    "state_records_expected_at_full_rate": 290,
+    "fraction_of_expected": 1.0,
+    "gaps_in_state_records": [],
+    "seconds_without_state_records": 0,
+    "state_records_without_link": 60,
+    "seconds_without_link": 6.0,
+    "note": "A record without a link holds the last values AEGIS had, marked connected=false; it is not a measurement of the vehicle."
+  },
+  "not_in_this_package": {
+    "kept_in_the_session_folder": [],
+    "never_recorded": [
+      "raw MAVLink traffic",
+      "application log text",
+      "resource utilisation over time"
+    ]
+  },
+  "software": {
+    "aegis_version": "0.1.0",
+    "git_commit": "c442125cd33f64dc2f3aa5d4b2b8a0cb7bb9a22e",
+    "git_uncommitted_changes": true,
+    "python": "3.12.3",
+    "platform": "Linux-6.18.44-fc-v470-x86_64-with-glibc2.39"
+  },
+  "device": {
+    "model": null,
+    "machine": "x86_64",
+    "cpu_count": 2,
+    "hostname_sha256": "5bce98f73f3ed0c8"
+  },
+  "reproduce": {
+    "replay_this_incident": "AEGIS_MODE=replay AEGIS_REPLAY_FILE=/home/claude/aegis-one/data/generated/sessions/20261114T161557/incidents/INC-20261114T161635-01/events.jsonl bash scripts/run_backend.sh",
+    "verify_this_package": "python scripts/incident_tool.py verify /home/claude/aegis-one/data/generated/sessions/20261114T161557/incidents/INC-20261114T161635-01",
+    "limits": "Replay shows what was recorded. It does not re-run the software and is not a deterministic reproduction of the event."
+  },
+  "root_cause": "Not determined. This package is evidence, not a diagnosis."
+}
