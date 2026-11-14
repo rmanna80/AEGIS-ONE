@@ -370,8 +370,27 @@ Temperature 49.6 C before and 54.0 C after; the firmware reported no power or th
 flags (so `vcgencmd` was read correctly). These are one workload at a time over under a
 minute; sustained combined load and its temperature have not been measured.
 
-Still unverified: MAVLink from WSL2 to the Pi across a real network, a flight with the Pi in
-the loop, the SSH tunnel workflow, and the systemd unit.
+**Flight with the Pi in the loop, 2026-11-13.** PX4 SITL (built-in simulator) on the owner's
+PC under WSL2 with default networking, MAVLink over the home network to the Pi, backend and
+demo script on the Pi:
+
+- Demo 1 passed 5 of 5 in 140 s, with no critical alert. The same demo takes 137 to 141 s
+  with everything on one machine.
+- The Pi's backend attested the simulator about 3 s after start and held 0.97-0.98x with no
+  backend lag; load stayed near 2 on four cores.
+
+Two failures on the way, both fixed:
+
+- `setup_pi.sh` appended the operator token below the template's placeholder instead of
+  replacing it; a command reading the token from `.env` got both lines.
+- The first flight lost its link after four waypoints. The simulator on the PC had been
+  replaced by a new instance, which no longer carried the hand-added link. The Pi's
+  `telemetry.frozen` and `link.lost` alerts fired within 2 s. `run_px4.sh` now adds the link
+  at every launch when `AEGIS_COMPANION_IP` is set.
+
+Still unverified on the Pi: every demo other than Demo 1, sensors and detection running during
+a flight, sustained temperature, the dashboard through the SSH tunnel beyond opening it, the
+systemd unit, and Gazebo with the Pi in the loop.
 
 ## Not tested yet
 

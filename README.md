@@ -56,7 +56,7 @@ No drone hardware is needed. No physical-flight code path exists in this release
 | Automatic Hold when two airborne vehicles get too close | Unit-tested; **not triggered in a live flight** |
 | Telemetry anomaly detection (8 checks, advisory) and fault injection to test it | Verified live against PX4 SITL (Demo 6: 8 of 8 criteria) |
 | Command audit log with hash chain, failed-login and remote-command alerts, posture check | Verified (Demo 6 and unit tests) |
-| Raspberry Pi as companion computer (setup script, MAVLink link to another machine, device health alerts, benchmark) | Link flown on one machine; **not yet run on a Pi** |
+| Raspberry Pi as companion computer (setup script, MAVLink link to another machine, device health alerts, benchmark) | Flown on the owner's Pi 5 with the simulator on a PC (Demo 1: 5 of 5) |
 | Thermal imagery rendered by Gazebo, replay of thermal or fleet sessions, fleets under Gazebo | Not built |
 | ROS 2 Jazzy bridge, LiDAR | Not started |
 

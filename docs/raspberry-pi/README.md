@@ -12,11 +12,11 @@ is developed before it ever meets an aircraft: real companion hardware, simulate
    your browser ── SSH tunnel ────────────────────┘
 ```
 
-**Status: installed and benchmarked on a Raspberry Pi 5; not yet flown with it.** The setup
-script and benchmark ran on the owner's Pi 5 (results in `docs/testing/README.md`). The extra
-MAVLink link was flown end to end on one machine only (Demo 1, 5 of 5, with the backend
-configured as on the Pi). The network path between WSL2 and the Pi, a flight with the Pi in
-the loop, the tunnel and the systemd unit are still unverified.
+**Status: flown with a Raspberry Pi 5 in the loop.** On the owner's Pi 5 the setup script and
+benchmark ran, the backend attested the simulator across the home network (PX4 SITL on a PC
+under WSL2, default networking), and Demo 1 passed 5 of 5 (details in
+`docs/testing/README.md`). Other demos, on-board sensors during a flight, sustained
+temperature, the systemd unit and Gazebo with the Pi in the loop are not yet run.
 
 **Do not connect the Pi to a real flight controller.** AEGIS refuses to command anything that
 does not prove it is a simulator, and no hardware path exists in this release.
@@ -135,10 +135,12 @@ accept packets from the network, because the simulator is on another machine.
 
 - Check the address: `ping 192.168.x.y` from the Ubuntu terminal.
 - Both machines must be on the same network (a guest Wi-Fi often isolates devices).
-- WSL2 reaches the network through Windows. If packets do not arrive, allow outbound UDP for
-  WSL in Windows Firewall, or switch WSL to mirrored networking (`networkingMode=mirrored`
-  under `[wsl2]` in `%UserProfile%\.wslconfig`, then `wsl --shutdown`). I have not been able
-  to test either.
+- WSL2's default networking carried the link in testing. If packets do not arrive on another
+  setup, allow outbound UDP for WSL in Windows Firewall, or try mirrored networking
+  (`networkingMode=mirrored` under `[wsl2]` in `%UserProfile%\.wslconfig`, then
+  `wsl --shutdown`); neither was needed, so neither is tested.
+- Was the simulator restarted? A new instance has no link unless it was started with
+  `AEGIS_COMPANION_IP`.
 - On the Pi, `sudo ss -lun | grep 14540` should show the listener.
 
 ### Start the backend with the Pi (optional)
