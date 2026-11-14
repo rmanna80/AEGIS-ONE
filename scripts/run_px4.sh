@@ -15,6 +15,9 @@
 # To use the stock cameras anyway:  AEGIS_LIGHT_SENSORS=0 bash scripts/run_px4.sh gazebo-depth
 # To run without the Gazebo window: HEADLESS=1 bash scripts/run_px4.sh ...
 #
+# Companion computer (e.g. a Raspberry Pi running the AEGIS backend):
+#   AEGIS_COMPANION_IP=192.168.1.57 bash scripts/run_px4.sh sih
+#
 # Reset procedure: Ctrl+C, then run it again. PX4 starts landed and disarmed at
 # home. MAVLink for AEGIS is on UDP 14540 (localhost only).
 set -euo pipefail
@@ -65,15 +68,37 @@ compass_params() {  # $1 = gazebo | builtin
   fi
 }
 
+# Companion computer: when AEGIS_COMPANION_IP is set, every launch also sends this
+# simulator's MAVLink there (see scripts/link_companion.sh and docs/raspberry-pi). The
+# link belongs to the running simulator, so it has to be added again after each start;
+# doing it here means a restart cannot silently leave the companion without a vehicle.
+link_companion_when_ready() {
+  [ -n "${AEGIS_COMPANION_IP:-}" ] || return 0
+  (
+    for _ in $(seq 1 90); do
+      sleep 1
+      if "$BUILD/bin/px4-param" show SYS_AUTOSTART >/dev/null 2>&1; then
+        sleep 2
+        bash "$REPO_ROOT/scripts/link_companion.sh" "$AEGIS_COMPANION_IP" "${AEGIS_COMPANION_PORT:-14540}" \
+          || echo "Could not link the companion computer at $AEGIS_COMPANION_IP." >&2
+        exit 0
+      fi
+    done
+    echo "The simulator did not come up in 90 s; the companion computer was not linked." >&2
+  ) &
+}
+
 case "$SIM" in
   sih)
     compass_params builtin
+    link_companion_when_ready
     cd "$BUILD"
     # -d: no interactive shell, so it also runs without a terminal.
     PX4_SIM_MODEL=sihsim_quadx exec ./bin/px4 -d
     ;;
   gazebo|gazebo-cam|gazebo-depth)
     compass_params gazebo
+    link_companion_when_ready
     MODEL=gz_x500
     [ "$SIM" = "gazebo-cam" ] && MODEL=gz_x500_mono_cam
     [ "$SIM" = "gazebo-depth" ] && MODEL=gz_x500_depth

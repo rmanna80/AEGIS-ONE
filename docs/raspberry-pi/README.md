@@ -105,15 +105,16 @@ them with what a flight needs. Measured medians: 158 ms, 15 ms and 21 ms on a Pi
    ```bash
    cd ~/AEGIS-ONE && bash scripts/run_backend.sh
    ```
-2. **PC (Ubuntu / WSL):** start the simulator, then point it at the Pi (use the address from
-   `hostname -I`).
+2. **PC (Ubuntu / WSL):** start the simulator with the Pi's address (from `hostname -I`).
    ```bash
    cd ~/AEGIS-ONE && git pull
-   bash scripts/run_px4.sh sih
-   # in a second terminal, once it shows "Ready for takeoff!":
-   bash scripts/link_companion.sh 192.168.x.y
+   AEGIS_COMPANION_IP=192.168.x.y bash scripts/run_px4.sh sih
    ```
-   Within a few seconds the Pi's backend log should show `Simulator attested`.
+   A few seconds after it starts it prints `PX4 instance 0 now also sends MAVLink to ...`,
+   and the Pi's backend log shows `Simulator attested`. The link belongs to the running
+   simulator: if the simulator is restarted without `AEGIS_COMPANION_IP`, the Pi loses its
+   vehicle (this happened in the first test flight). `scripts/link_companion.sh <address>`
+   adds the link to a simulator that is already running.
 3. **PC:** open the dashboard through an SSH tunnel. In another Ubuntu (WSL) terminal:
    ```bash
    ssh -L 8000:127.0.0.1:8000 YOUR_USERNAME@aegis-pi.local
