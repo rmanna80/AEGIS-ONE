@@ -120,9 +120,9 @@ ADAPTERS: list[dict[str, Any]] = [
         "provenance": [Provenance.PHYSICAL.value],
         "evidence": Evidence.HARDWARE_TESTED.value,
         "notes": "Ran on the owner's Raspberry Pi 5 with a USB webcam during a simulated "
-        "flight (2026-11-14, Demo 1 passed): 2.7 frames/s through the detector, 335 ms "
-        "median detection with the default 2 threads. The format the camera agreed to and "
-        "its delivered rate were not yet recorded (scripts/camera_check.py). A bench "
+        "flight (2026-11-14 and 15, Demo 1 passed every time): 640x480 MJPG agreed at 30 "
+        "frames/s, 7.6 to 15 delivered; 2.0 to 2.6 frames/s through the detector, 231 to "
+        "348 ms per detection depending on settings. A bench "
         "camera only: not on any vehicle, its detections are never placed in the world. "
         "Video is not saved unless AEGIS_RECORD_CAMERA_VIDEO=always.",
     },

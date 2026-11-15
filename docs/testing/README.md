@@ -468,7 +468,20 @@ Simulator on the PC, backend on the Pi with `AEGIS_CAMERA=usb`.
 | Vehicle data age | 57 ms median |
 | MAVSDK port from the PC | open before the firewall rule, timed out after |
 
-The "updates per second" from that run (1.05) is an artifact of the measurement script,
+Detector settings compared on the Pi, 2026-11-15 (one Demo 1 flight each, all passing,
+no alerts):
+
+| | 2 threads (default) | 4 threads | 2 threads, capped at 2 frames/s |
+| --- | --- | --- | --- |
+| CPU median | 92% | 99.5% | 78% |
+| Frames detected per second | 2.6 | 2.0 | 2.0 |
+| Longest gap in fresh vehicle data | 205 ms | 505 ms | 202 ms |
+| Round trip Pi to PC, median | 4.8 ms | 139 ms | 11.2 ms |
+
+ONNX Runtime spinning, on the development machine at 2 frames/s, two runs each: 33-34% of
+one core with spinning, 22% without; detection 70-73 ms vs 65-70 ms. Now off by default.
+
+The "updates per second" from the first Pi run (1.05) is an artifact of the measurement script,
 whose ping to an unanswering PC stalled its sampling to once a second. Fixed; checked here
 with a stand-in ping that never answers (10 samples per second, 9.95 updates per second).
 

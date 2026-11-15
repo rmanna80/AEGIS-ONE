@@ -100,6 +100,11 @@ Topology tested: backend on the Pi, PX4 SITL on a PC, MAVLink over the LAN.
 | Detector on live webcam frames, in flight | 2.7 frames/s processed (median); 335 ms median, 387 ms p95 per frame, with the default 2 threads | same |
 | MAVSDK port closed to the network | From the PC: connected before `lock_mavsdk_port.sh`, timed out after | `nc -zv`, 2026-11-14 |
 
+| Detector settings compared in flight (2 threads uncapped, 4 threads, 2 threads capped at 2 frames/s) | CPU 92% / 99.5% / 78%; frames detected 2.6 / 2.0 / 2.0 per second; longest gap in fresh vehicle data 205 / 505 / 202 ms | `edge_measure.py`, 2026-11-15, one run each; details in `docs/raspberry-pi/README.md` |
+| Network round trip Pi to PC | 4.8 ms median, 16 ms p95 (rises to 139 ms when the Pi's CPU is saturated) | same |
+| Webcam | Agreed to 640×480 MJPG at 30 frames/s; delivered 7.6 to 15 | backend log, same runs |
+| Firewall rule after enabling the boot service | Present; service enabled (not yet checked across a reboot) | `lock_mavsdk_port.sh --status` |
+
 Reading those numbers:
 
 - **The detector takes almost all the CPU.** It runs as fast as it can, and on the Pi that
@@ -120,9 +125,8 @@ Reading those numbers:
 
 | Item | Why it matters |
 | --- | --- |
-| How often fresh vehicle data arrives on the Pi, and the network round trip | The first run's sampling was too slow (see above) and the PC does not answer ping |
-| The webcam's negotiated format and delivered frame rate | `camera_check.py` output not yet recorded |
-| CPU with the detector capped, or with 4 detector threads | Not yet measured |
+| Where the CPU goes when the detector is capped (about half is unaccounted for) | Needs a run without the camera |
+| ONNX Runtime spinning off, on the Pi | Measured only on the development machine (a third less detector CPU) |
 | Depth mapping in flight (Demo 4) | Needs Gazebo on the PC streaming depth to the Pi |
 | Temperature over a long run, in an enclosure, without a fan | The benchmark lasted about a minute |
 | Demos 5 and 6, the TRUST scenarios, incident capture | Not run on the Pi |

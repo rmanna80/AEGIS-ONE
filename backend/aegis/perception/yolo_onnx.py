@@ -127,12 +127,20 @@ class OnnxYoloBackend:
         allowed_labels: list[str] | None = None,
         input_size: int = 640,
         threads: int | None = None,
+        allow_spinning: bool = False,
     ) -> None:
         if not model_path.is_file():
             raise FileNotFoundError(f"Detector model not found: {model_path}")
         options = ort.SessionOptions()
         if threads:
             options.intra_op_num_threads = threads
+        # ONNX Runtime's threads otherwise keep a core busy waiting for the next frame.
+        # Off by default: on the development machine, at 2 frames/s, it cut the detector's
+        # CPU use by about a third with no slower detection (repeated twice).
+        options.add_session_config_entry(
+            "session.intra_op.allow_spinning", "1" if allow_spinning else "0"
+        )
+        self.allow_spinning = allow_spinning
         self._session = ort.InferenceSession(
             str(model_path), sess_options=options, providers=["CPUExecutionProvider"]
         )

@@ -61,8 +61,9 @@ def find_usb_cameras(sysfs: Path = SYSFS_VIDEO) -> list[dict[str, str]]:
     """Video4Linux capture nodes driven by the USB video class driver, in device order.
 
     A UVC camera creates two nodes (image and metadata); the image node has index 0.
-    On a Raspberry Pi 5 the low numbers belong to the camera interface and the ISP, so
-    "/dev/video0" is usually not the webcam."""
+    Its number depends on what else is attached: with a Pi camera module the low numbers
+    go to the camera interface; without one, the owner's Pi 5 gave the webcam
+    /dev/video0. Finding it by driver works either way."""
     found: list[dict[str, str]] = []
     if not sysfs.is_dir():
         return found

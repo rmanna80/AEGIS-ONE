@@ -66,6 +66,9 @@ class Settings(BaseSettings):
     # At most this many frames per second through the detector (0 = as fast as it can).
     # On a companion computer the detector otherwise takes every core it can get.
     detector_max_fps: float = Field(default=0.0, ge=0.0, le=60.0)
+    # Let ONNX Runtime's threads spin while waiting for work (lower latency in theory,
+    # a busy core in practice). Off unless set.
+    detector_spin: bool = False
 
     # Navigation / mapping (optional). depth: "none", "raycast" (software depth
     # sensor against the scenario's geometry; works on any simulator) or "stream"

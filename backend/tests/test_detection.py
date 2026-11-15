@@ -142,3 +142,21 @@ def test_real_model_finds_labelled_objects_in_a_real_photo() -> None:
     image = cv2.imread(str(root / "images" / "val" / "000000000049.jpg"))
     labels = {d.label for d in OnnxYoloBackend(MODEL).infer(image)}
     assert {"horse", "person"} <= labels
+
+
+def test_onnx_runtime_does_not_spin_unless_asked() -> None:
+    """Spinning threads keep a core busy between frames; it is off unless configured."""
+    from pathlib import Path
+
+    import pytest
+
+    model = Path(__file__).resolve().parents[2] / "models/yolo11n.onnx"
+    if not model.is_file():
+        pytest.skip("detector model not downloaded")
+    from aegis.perception.yolo_onnx import OnnxYoloBackend
+
+    quiet = OnnxYoloBackend(model, threads=1)
+    spinning = OnnxYoloBackend(model, threads=1, allow_spinning=True)
+    key = "session.intra_op.allow_spinning"
+    assert quiet._session.get_session_options().get_session_config_entry(key) == "0"
+    assert spinning._session.get_session_options().get_session_config_entry(key) == "1"

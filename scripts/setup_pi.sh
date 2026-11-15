@@ -63,6 +63,9 @@ if [ ! -f .env ]; then
     echo "AEGIS_OPERATOR_TOKEN=$TOKEN"
     echo "# The simulated autopilot runs on another machine, so listen on the network:"
     echo "AEGIS_PX4_URL=udpin://0.0.0.0:14540"
+    # Measured on a Pi 5 with a USB webcam (docs/raspberry-pi/README.md): uncapped, the
+    # detector kept the CPU at 92%; capped at 2 frames/s, 78%.
+    echo "AEGIS_DETECTOR_MAX_FPS=2"
   } >> .env
   echo "Created .env with a new operator token."
 fi

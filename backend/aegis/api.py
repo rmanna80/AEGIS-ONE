@@ -271,6 +271,7 @@ def build_perception(
             confidence_threshold=settings.detector_confidence,
             allowed_labels=settings.detector_labels or None,
             threads=settings.detector_threads or max(1, min(4, (os.cpu_count() or 2) // 2)),
+            allow_spinning=settings.detector_spin,
         )
     except (OSError, ValueError, RuntimeError) as exc:
         return None, str(exc)

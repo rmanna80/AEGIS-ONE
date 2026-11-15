@@ -206,8 +206,8 @@ v4l2-ctl --list-devices                         # optional: sudo apt install v4l
 .venv/bin/python scripts/camera_check.py --seconds 30
 ```
 
-It finds the webcam by its driver (on a Pi 5, `/dev/video0` is the camera interface, not
-the webcam), then reports what format it agreed to, how many frames per second it really
+It finds the webcam by its driver, so it works whatever device number the webcam gets
+(on this Pi it was `/dev/video0`; with a camera module attached it would be higher), then reports what format it agreed to, how many frames per second it really
 delivers, how fast the detector processes them, how many it had no time for, and the
 temperature before and after. Nothing is saved but the numbers
 (`data/generated/camera_checks/`). Add `--snapshot` to save one picture if you want to see
@@ -233,19 +233,45 @@ Measure everything together during a flight:
 .venv/bin/python scripts/edge_measure.py --seconds 90 --peer 192.168.1.7 --label "Pi 5, webcam, Demo 1"
 ```
 
-### What the first run showed (2026-11-14)
+### What the runs showed
 
-Demo 1 passed with the webcam and detector running. The detector managed 2.7 frames per
-second (335 ms each) and kept the processor at about 92%; the temperature peaked at
-60.6 °C with no throttling. Two settings change that trade-off:
+Owner's Pi 5, USB webcam at 640×480 MJPG, simulator on the PC, Demo 1 flown in every
+run, 90 s of measurement each (2026-11-15). One run per setting.
 
-```bash
-AEGIS_DETECTOR_THREADS=4 bash scripts/run_backend.sh   # faster detection, same CPU
-AEGIS_DETECTOR_MAX_FPS=2 bash scripts/run_backend.sh   # fewer frames, CPU left over
-```
+| | A: as installed then | B: `AEGIS_DETECTOR_THREADS=4` | C: `AEGIS_DETECTOR_MAX_FPS=2` |
+| --- | --- | --- | --- |
+| CPU, all 4 cores (median) | 92% | 99.5% | 78% |
+| Temperature (max) | 61.1 °C | 63.9 °C | 58.4 °C |
+| Frames detected per second | 2.6 | 2.0 | 2.0 |
+| Detection time per frame (median) | 348 ms | 273 ms | 231 ms |
+| Fresh vehicle data, longest gap | 205 ms | 505 ms | 202 ms |
+| Vehicle data age (max) | 220 ms | 526 ms | 262 ms |
+| Round trip Pi to PC (median) | 4.8 ms | 139 ms | 11.2 ms |
+| Webcam frames delivered per second (median) | 7.6 | 15.0 | 7.6 |
 
-If `edge_measure.py` says your PC did not answer a ping, Windows is blocking it. To allow
-ping from your own network only, in PowerShell as administrator on the PC:
+No run raised an alert or showed throttling. What follows from them:
+
+- **Four detector threads made things worse.** No more frames were detected, the CPU
+  was saturated, the gap between fresh vehicle updates more than doubled and the round
+  trip timed from the Pi rose from about 5 ms to 139 ms (most likely the Pi being too busy
+  to handle the reply, since only the thread count changed). Leave the default of two.
+- **Capping the detector at 2 frames per second freed about 14 points of CPU** for 23%
+  fewer detections, ran 3 °C cooler, and each detection was quicker. `setup_pi.sh` now
+  writes `AEGIS_DETECTOR_MAX_FPS=2` into a new `.env`; add it to yours by hand.
+- **Even capped, the Pi sat at 78%.** Inference at 2 frames per second accounts for
+  roughly a quarter of the processor, so something else is using about half: candidates
+  are ONNX Runtime threads spinning between frames (now off by default), decoding every
+  webcam frame, the dashboard if it is open on the Pi itself, and the MAVSDK server. A
+  run without the camera is needed to tell.
+- **The webcam agreed to 30 frames per second but delivered 7.6 to 15.** It was not CPU:
+  the fastest delivery came in the busiest run. Webcams commonly lower their rate in dim
+  light; that is not confirmed here.
+- One 90-second run per setting: differences of a few percent or milliseconds (for
+  example the round trip in A and C) are within what one run cannot separate from noise.
+
+The first run, on 2026-11-14, also showed that `edge_measure.py`'s ping to a PC that did
+not answer (Windows blocks ping by default) stalled its sampling; fixed. To let the PC
+answer ping from your own network only, in PowerShell as administrator:
 
 ```powershell
 New-NetFirewallRule -DisplayName "AEGIS ping test" -Direction Inbound -Protocol ICMPv4 -IcmpType 8 -RemoteAddress LocalSubnet -Action Allow
