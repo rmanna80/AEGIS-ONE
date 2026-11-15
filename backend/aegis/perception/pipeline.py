@@ -8,6 +8,7 @@ import json
 import logging
 import time
 from collections import deque
+from collections.abc import Callable
 from pathlib import Path
 from typing import IO, Any
 
@@ -44,15 +45,21 @@ class PerceptionPipeline:
         detector: InferenceBackend,
         tracker: MultiObjectTracker | None = None,
         record_dir: Path | None = None,
+        record_video: bool = True,
     ) -> None:
         """``record_dir``: session directory. Each processed frame appends one line to
-        ``detections.jsonl`` and one frame to ``video.mp4`` (line N <-> video frame N)."""
+        ``detections.jsonl`` and, when ``record_video``, one frame to ``video.mp4``
+        (line N <-> video frame N). Without video only labels and boxes are kept."""
         self.camera = camera
         self.detector = detector
         self.tracker = tracker or MultiObjectTracker()
         self.latest: PerceptionResult | None = None
         self.selected_track_id: int | None = None
         self._record_dir = record_dir
+        self.record_video = record_video
+        # Called from a worker thread with each frame's result and its preview image
+        # (None when video may not be saved). Used to keep incident evidence.
+        self.frame_listeners: list[Callable[[dict[str, Any], Image | None], None]] = []
         self._record: IO[str] | None = None
         self._video: cv2.VideoWriter | None = None
         self._subscribers: set[asyncio.Queue[VideoMessage]] = set()
@@ -160,12 +167,21 @@ class PerceptionPipeline:
         self.frames_processed += 1
 
         payload = result.model_dump(mode="json")
+        if self.frame_listeners:
+            image = await asyncio.to_thread(_preview_image, frame) if self.record_video else None
+            for listener in self.frame_listeners:
+                await asyncio.to_thread(listener, payload, image)
         recording = self._record is not None and self._record_dir is not None
-        if recording or self._subscribers:
+        if recording and not self.record_video and not self._subscribers:
+            assert self._record is not None
+            self._record.write(json.dumps(payload, separators=(",", ":")) + "\n")
+            self._record.flush()
+        elif recording or self._subscribers:
             preview = await asyncio.to_thread(_preview_image, frame)
             if recording:
                 assert self._record is not None and self._record_dir is not None
-                await asyncio.to_thread(self._write_video_frame, preview)
+                if self.record_video:
+                    await asyncio.to_thread(self._write_video_frame, preview)
                 self._record.write(json.dumps(payload, separators=(",", ":")) + "\n")
                 self._record.flush()
             if self._subscribers:
@@ -229,6 +245,11 @@ class PerceptionPipeline:
             "faults": faults,
             "last_error": self.last_error,
             "recording": self._record_dir.name if self._record_dir else None,
+            "recording_video": bool(self._record_dir) and self.record_video,
+            "camera_mount": getattr(self.camera, "mount", "vehicle"),
+            "camera": details()
+            if callable(details := getattr(self.camera, "details", None))
+            else None,
         }
 
 

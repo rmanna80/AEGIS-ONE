@@ -48,14 +48,33 @@ class Criterion(_Model):
     measure: str = Field(
         description="alert_raised_within_s | alert_cleared_within_s | mission_phase_in | "
         "incident_packaged | incident_verifies | snapshot_labelled | no_alert_before_fault | "
-        "incident_completeness_at_least"
+        "incident_completeness_at_least | no_other_alerts | bridge_restarted | "
+        "flight_mode_throughout | vehicle_recovered"
+    )
+    allowed: list[str] | None = Field(
+        default=None, description="no_other_alerts: alert codes the fault may also cause."
+    )
+    modes: list[str] | None = Field(
+        default=None, description="flight_mode_throughout: modes the autopilot may be in."
     )
     min_fraction: float | None = None
     code: str | None = None
+    codes: list[str] | None = Field(
+        default=None,
+        description="Instead of code: the criterion is met by any of these alerts (raised "
+        "when the first appears, cleared when none is active).",
+    )
     max_s: float | None = None
     phases: list[str] | None = None
     prefixes: list[str] | None = None
     safety_critical: bool = False
+
+
+def alert_key(criterion: Criterion) -> str | None:
+    """How a criterion's alert or alerts are named in the measurements."""
+    if criterion.codes:
+        return " or ".join(sorted(criterion.codes))
+    return criterion.code
 
 
 class Scenario(_Model):

@@ -146,6 +146,15 @@ class RecordedTelemetryAdapter:
         self.finished = False
         self._task: asyncio.Task[None] | None = None
 
+    def wall_clock_at_t0(self) -> float:
+        """This computer's wall clock (UTC) at recording time 0. From the records' own
+        ``utc`` when they have it (true for incident slices, whose ``t`` was re-based),
+        otherwise from the header."""
+        for record in self.records:
+            if record.get("utc") is not None:
+                return float(record["utc"]) - float(record["t"])
+        return float(self.header["started_at_unix_s"])
+
     @property
     def source(self) -> str:
         # Session recordings are all called flight.jsonl; name them by their session.

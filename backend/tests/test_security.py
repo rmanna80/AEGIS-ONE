@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import time
 from pathlib import Path
 from typing import Any
 
@@ -16,6 +17,7 @@ from aegis.contracts import BatteryState, Severity, Vec3, VehicleState
 from aegis.faults import FaultInjector, FaultRequest
 from aegis.hub import TelemetryHub
 from aegis.missions import MissionPhase, Waypoint
+from aegis.safety import SafetyLimits, evaluate
 from aegis.security import AuditLog, SecurityMonitor, is_loopback, posture, verify_audit_log
 from conftest import make_mission, make_state
 from test_api import AUTH, TOKEN, FakeVehicle
@@ -119,9 +121,25 @@ def test_clock_reversal_and_frozen_telemetry() -> None:
     frozen = Flight()
     frozen.fly(3.0)
     state = frozen.step()
-    for i in range(30):  # the same snapshot keeps arriving for 3 s
-        frozen.monitor.observe(state.model_copy(), frozen.phase, None, frozen.t + 0.1 * (i + 1))
+    for i in range(30):  # new messages keep arriving for 3 s, all saying the same thing
+        again = state.model_copy(update={"received_at_unix_s": state.received_at_unix_s + i + 1})
+        frozen.monitor.observe(again, frozen.phase, None, frozen.t + 0.1 * (i + 1))
     assert "telemetry.frozen" in frozen.raised()
+
+
+def test_no_new_data_is_a_stall_not_frozen_telemetry() -> None:
+    """Found by the bridge-crash scenario: when data stops arriving the last state is
+    shown again, unchanged. That is a stall (the stale-data check reports it), not data
+    that keeps arriving with the same content."""
+    stalled = Flight()
+    stalled.fly(3.0)
+    state = stalled.step()
+    for i in range(30):
+        stalled.monitor.observe(state.model_copy(), stalled.phase, None, stalled.t + 0.1 * (i + 1))
+    assert "telemetry.frozen" not in stalled.raised()
+    age = 3.0
+    findings = evaluate(state, state.received_at_unix_s + age, SafetyLimits())
+    assert [code for code, _, _ in findings] == ["telemetry.stale"]
 
 
 def test_battery_that_rises_or_plunges_is_flagged() -> None:
@@ -230,6 +248,62 @@ def test_freeze_repeats_one_snapshot() -> None:
     later = injector.apply(make_state(vehicle_time_s=11.0, received_at_unix_s=2.0))
     assert later.vehicle_time_s == first.vehicle_time_s == 10.0
     assert later.received_at_unix_s == 2.0 and later.injected_faults == ("freeze",)
+
+
+def test_delay_goes_quiet_then_delivers_late_and_never_goes_back_in_time() -> None:
+    """A slowing link first delivers nothing new, then old data in order. The first
+    version of this fault jumped back in time instead, which the clock-reversal check
+    rightly flagged (found by the delay scenario)."""
+    injector = FaultInjector()
+    for i in range(6):  # 0.6 s of history at 10 Hz
+        injector.apply(make_state(vehicle_time_s=float(i), received_at_unix_s=100.0 + i))
+        time.sleep(0.1)
+    injector.inject(FaultRequest(kind="delay", seconds=0.35, duration_s=5.0))
+    shown: list[VehicleState] = []
+    for i in range(6, 14):
+        shown.append(
+            injector.apply(make_state(vehicle_time_s=float(i), received_at_unix_s=100.0 + i))
+        )
+        time.sleep(0.1)
+    times = [s.vehicle_time_s or 0.0 for s in shown]
+    assert times == sorted(times)  # never backwards
+    assert times[0] == 5.0  # at first: the last state shown before the delay
+    assert times[-1] <= 13.0 - 3.0  # later: about 0.35 s (3 states) behind
+    assert all(s.received_at_unix_s == 100.0 + (s.vehicle_time_s or 0) for s in shown)
+    assert all(s.injected_faults == ("delay",) for s in shown)
+    late = shown[-1]
+    findings = {
+        code for code, _, _ in evaluate(late, late.received_at_unix_s + 2.5, SafetyLimits())
+    }
+    assert "telemetry.stale" in findings
+
+    lost = FaultInjector()
+    lost.inject(FaultRequest(kind="gps_loss"))
+    state = lost.apply(make_state())
+    assert state.gps is not None and state.gps.fix_type == "NO_FIX"
+    assert "gps.no_fix" in {code for code, _, _ in evaluate(state, time.time(), SafetyLimits())}
+
+
+def test_process_faults_are_not_telemetry_alterations() -> None:
+    injector = FaultInjector()
+    for kind in ("external_hold", "bridge_crash"):
+        with pytest.raises(ValueError):
+            injector.inject(FaultRequest(kind=kind))
+
+
+def test_a_bridge_crash_is_carried_out_only_by_an_attested_simulator_adapter(
+    tmp_path: Path,
+) -> None:
+    client, vehicle, _ = client_with(tmp_path, fault_injection=True)
+    vehicle.attested = True  # type: ignore[attr-defined]
+    with client:
+        body = {"kind": "bridge_crash"}
+        no_bridge = client.post("/api/faults", json=body, headers=AUTH)
+        assert no_bridge.status_code == 409 and "no bridge" in no_bridge.json()["detail"]
+        crashed: list[bool] = []
+        vehicle.crash_bridge_for_test = lambda: crashed.append(True) or 4242  # type: ignore[attr-defined]
+        assert client.post("/api/faults", json=body, headers=AUTH).status_code == 200
+        assert crashed == [True]
 
 
 def client_with(tmp_path: Path, **settings: Any) -> tuple[TestClient, FakeVehicle, TelemetryHub]:

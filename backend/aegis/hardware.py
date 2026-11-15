@@ -114,12 +114,25 @@ ADAPTERS: list[dict[str, Any]] = [
     },
     {
         "kind": "RGB camera",
-        "name": "Physical camera (CSI / USB) on the companion computer",
+        "name": "USB webcam (Video4Linux), bench mount",
+        "implementation": "aegis.perception.usb_camera.UsbCameraAdapter",
+        "interface": "CameraSource",
+        "provenance": [Provenance.PHYSICAL.value],
+        "evidence": Evidence.UNIT_TESTED.value,
+        "notes": "Logic tested against a stand-in device, and run through the whole backend "
+        "and dashboard with frames from a video file. Not yet run on a real webcam: "
+        "scripts/camera_check.py is the check. A bench camera only: not on any vehicle, "
+        "its detections are never placed in the world. Video is not saved unless "
+        "AEGIS_RECORD_CAMERA_VIDEO=always.",
+    },
+    {
+        "kind": "RGB camera",
+        "name": "Raspberry Pi camera module (CSI)",
         "implementation": None,
         "interface": "CameraSource",
         "provenance": [Provenance.PHYSICAL.value],
         "evidence": Evidence.NOT_IMPLEMENTED.value,
-        "notes": "No adapter. Needed for the first physical bench experiments.",
+        "notes": "No adapter (needs libcamera / Picamera2). No camera module owned yet.",
     },
     {
         "kind": "AI camera / object detector",

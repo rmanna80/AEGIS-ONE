@@ -116,6 +116,7 @@ class PX4SITLAdapter:
 
         self._t: dict[str, Any] = {}  # latest raw telemetry by stream name
         self._last_rx = 0.0  # monotonic time of the last position/attitude sample
+        self._last_rx_wall = 0.0  # the same moment on the wall clock (UTC)
         self.messages: deque[AutopilotMessage] = deque(maxlen=50)  # PX4 status texts
         self._link_was_up = False
         self._mavsdk_connected = False  # MAVSDK's own heartbeat state (3 s wall clock)
@@ -193,6 +194,7 @@ class PX4SITLAdapter:
                     self._t[name] = sample
                     if name in ("position", "quaternion"):
                         self._last_rx = time.monotonic()
+                        self._last_rx_wall = time.time()
                     if name == "quaternion" and sample.timestamp_us:
                         self._note_vehicle_clock(self._last_rx, sample.timestamp_us / 1e6)
             except asyncio.CancelledError:
@@ -203,6 +205,19 @@ class PX4SITLAdapter:
                         "Telemetry stream %s failed (%s); retrying", name, type(exc).__name__
                     )
             await asyncio.sleep(1.0)
+
+    def crash_bridge_for_test(self) -> int:
+        """Kill the MAVSDK bridge child process, to test that AEGIS notices and restarts
+        it (fault injection). Refused unless the autopilot has proved it is a simulator.
+        Nothing is sent to the autopilot."""
+        if not self.attested:
+            raise RuntimeError("Refused: the autopilot has not proved it is a simulator.")
+        process = getattr(self._system, "_server_process", None)
+        if process is None or process.poll() is not None:
+            raise RuntimeError("No MAVSDK bridge process is running.")
+        process.kill()
+        log.warning("MAVSDK bridge process %s killed for a crash test", process.pid)
+        return int(process.pid)
 
     async def _watch_server(self) -> None:
         """Restart the MAVSDK server child process if it dies.
@@ -542,7 +557,9 @@ class PX4SITLAdapter:
             vehicle_id=self.vehicle_id,
             provenance=self.provenance,
             source=self.source,
-            received_at_unix_s=time.time(),
+            # When the newest position/attitude data arrived, not when it was sampled
+            # here: if data stops arriving, its age grows and the stale-data check sees it.
+            received_at_unix_s=self._last_rx_wall or time.time(),
             vehicle_time_s=vehicle_time,
             sim_real_time_factor=self.real_time_factor,
             connected=connected,

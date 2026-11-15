@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from enum import StrEnum
 from pathlib import Path
+from typing import Literal
 
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -43,8 +44,17 @@ class Settings(BaseSettings):
     frontend_dist: Path = REPO_ROOT / "frontend" / "dist"
 
     # Perception (optional). camera: "none", "stream" (TCP frame stream, e.g. the
-    # Gazebo camera bridge) or "video:<path to a video file>".
+    # Gazebo camera bridge), "video:<path to a video file>", or "usb" (a USB webcam on
+    # this computer; "usb:4" or "usb:/dev/video4" picks one). A USB camera is physical
+    # and is a bench camera: it is not on the vehicle.
     camera: str = "none"
+    camera_width: int = Field(default=640, ge=160, le=3840)
+    camera_height: int = Field(default=480, ge=120, le=2160)
+    camera_fps: float = Field(default=30.0, gt=0.0, le=120.0)
+    # Save camera video in the session. "auto": yes for simulated cameras and footage,
+    # no for a physical camera (it would record the room and the people in it; labels
+    # and boxes are still recorded). "always" / "never" override.
+    record_camera_video: Literal["auto", "always", "never"] = "auto"
     camera_stream_host: str = "127.0.0.1"
     camera_stream_port: int = 5600
     detector_model: Path = REPO_ROOT / "models" / "yolo11n.onnx"

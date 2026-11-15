@@ -1,0 +1,96 @@
+{
+  "schema": "aegis.trust-scenario/1",
+  "id": "telemetry-delay-detection",
+  "title": "Telemetry arriving late is detected and reported",
+  "purpose": "A slow link shows the operator where the vehicle was, not where it is. Data older than 2 s must be flagged. Requirement R-STALE-1.",
+  "environment": {
+    "simulator": "px4_sitl",
+    "scenario_id": "open_field",
+    "provenance": "simulated",
+    "needs_fault_injection": true,
+    "devices": [
+      "backend host",
+      "PX4 SITL"
+    ]
+  },
+  "initial_conditions": "Vehicle landed at home, no mission in progress, backend recording, fault injection enabled.",
+  "mission": "demo_mission",
+  "baseline_s": 8.0,
+  "fault": {
+    "kind": "delay",
+    "duration_s": 8.0,
+    "parameters": {
+      "seconds": 3.0
+    },
+    "inject_when": "flying_mission"
+  },
+  "expected_behaviour": "The link goes quiet, then delivers each state 3 s late, for 8 s; it never goes back in time. Data becomes older than 2 s about 2 s after onset, and telemetry.stale must be raised within 0.5 s of that (2.5 s after onset); it clears within 3 s of the delay ending. The altered data is labelled. The monitors do not command the vehicle. An incident package is produced, verifies and is complete. No other alert, including when the view catches up 3 s at the end. The operator's Return works afterwards.",
+  "criteria": [
+    {
+      "id": "C1",
+      "description": "No monitored alert before the fault",
+      "measure": "no_alert_before_fault"
+    },
+    {
+      "id": "C2",
+      "description": "Late data is alerted quickly",
+      "measure": "alert_raised_within_s",
+      "code": "telemetry.stale",
+      "max_s": 2.5,
+      "safety_critical": true
+    },
+    {
+      "id": "C3",
+      "description": "The alert clears when data is current again",
+      "measure": "alert_cleared_within_s",
+      "code": "telemetry.stale",
+      "max_s": 3.0
+    },
+    {
+      "id": "C4",
+      "description": "The mission is not interrupted by the monitors",
+      "measure": "mission_phase_in",
+      "phases": [
+        "active",
+        "returning",
+        "completed"
+      ]
+    },
+    {
+      "id": "C5",
+      "description": "The incident is preserved",
+      "measure": "incident_packaged"
+    },
+    {
+      "id": "C6",
+      "description": "The preserved evidence verifies",
+      "measure": "incident_verifies"
+    },
+    {
+      "id": "C7",
+      "description": "The record of what AEGIS saw during the event is complete",
+      "measure": "incident_completeness_at_least",
+      "min_fraction": 0.95
+    },
+    {
+      "id": "C8",
+      "description": "Altered data is labelled",
+      "measure": "snapshot_labelled"
+    },
+    {
+      "id": "C9",
+      "description": "The fault causes no other monitored alert (no false alarms)",
+      "measure": "no_other_alerts"
+    },
+    {
+      "id": "C10",
+      "description": "After the test the operator's Return works; the vehicle lands",
+      "measure": "vehicle_recovered"
+    }
+  ],
+  "random_seed": null,
+  "max_duration_s": 300.0,
+  "limitations": [
+    "The delay is applied to AEGIS's copy after it was received; the link itself is not slowed. A real slow link would also drop and reorder messages."
+  ]
+}

@@ -79,6 +79,7 @@ class ScriptedBackend:
         self.armed = False
         self.posted: list[str] = []
         self.extra_alerts: list[str] = []
+        self.restarts = 0
 
     def sleep(self, seconds: float) -> None:
         self.now += seconds
@@ -94,6 +95,8 @@ class ScriptedBackend:
             self.posted.append(path)
         if path == "/api/system":
             return self.system
+        if path == "/api/health":
+            return {"bridge_restarts": self.restarts}
         if path == "/api/replay/session":
             return {"session_id": "S1", "software": {"git_commit": "abc"}, "device": {}}
         if path == "/api/security":
@@ -232,3 +235,83 @@ def test_blocked_when_fault_injection_is_off() -> None:
     backend.faults_enabled = False
     result = run(backend)
     assert result.status is Status.BLOCKED and backend.posted == []
+
+
+# ------------------------------------------------------------- new measures, suites
+
+
+class CrashingBackend(ScriptedBackend):
+    """A bridge crash: data stops (stale), the bridge is restarted, the mission is
+    marked as no longer tracked."""
+
+    def __init__(self, stray_alert: str | None = None, restarts: bool = True) -> None:
+        super().__init__(raise_alert_after_s=0.4)
+        self.stray_alert, self.does_restart = stray_alert, restarts
+
+    def call(self, path: str, body: Any = None, post: bool = False, check: bool = True) -> Any:
+        if path == "/api/faults":
+            assert body["kind"] == "bridge_crash"
+            self.restarts += 1 if self.does_restart else 0
+            self.phase = "failed"
+        answer = super().call(path, body, post, check)
+        if path == "/api/state":
+            codes = [a["code"] for a in answer["alerts"]]
+            answer["alerts"] = [
+                {"code": "telemetry.stale" if c == "link.lost" else c} for c in codes
+            ]
+            if self.stray_alert and self._fault_active():
+                answer["alerts"].append({"code": self.stray_alert})
+            answer["state"]["connected"] = True
+        return answer
+
+
+def run_crash(backend: ScriptedBackend) -> Any:
+    scenario, digest = load_scenario(REPO_ROOT / "trust/scenarios/bridge_crash_recovery.json")
+    runner = Runner(backend, sleep=backend.sleep, clock=backend.clock, log=lambda _: None)
+    return runner.run(scenario, digest)
+
+
+def test_any_of_several_alerts_meets_the_criterion_and_restarts_are_counted() -> None:
+    result = run_crash(CrashingBackend())
+    statuses = by_id(result)
+    assert statuses["C2"] is Status.PASS  # telemetry.stale counts for "data stopped"
+    assert result.measurements["alert_raised_after_s"]["link.lost or telemetry.stale"] < 1.0
+    assert statuses["C3"] is Status.PASS and statuses["C5"] is Status.PASS
+    assert statuses["C6"] is Status.PASS  # mission reported as no longer tracked
+    assert statuses["C7"] is Status.PASS  # Return worked afterwards
+    assert result.status is Status.PASS, result.status_reason
+
+
+def test_a_bridge_that_is_not_restarted_fails() -> None:
+    assert by_id(run_crash(CrashingBackend(restarts=False)))["C3"] is Status.FAIL
+
+
+def test_a_misdiagnosis_alongside_the_right_alert_is_a_failure() -> None:
+    result = run_crash(CrashingBackend(stray_alert="telemetry.frozen"))
+    assert by_id(result)["C11"] is Status.FAIL
+    assert "telemetry.frozen" in next(c.observed for c in result.criteria if c.id == "C11")
+
+
+def test_suite_status_is_the_worst_run_and_counts_are_not_averaged() -> None:
+    from aegis.trust.suite import suite_status, summarise
+
+    good = run(ScriptedBackend())
+    late = run(ScriptedBackend(raise_alert_after_s=9.0))
+    status, why = suite_status([good, good, late])
+    assert status is Status.FAIL and "1 of 3" in why
+    summary = summarise([good, good, late])["link-loss-detection"]
+    assert summary["criteria"]["C2"]["passed"] == "2 of 3"
+    assert summary["runs"] == ["PASS", "PASS", "FAIL"]
+    # The third run never raised the alert at all, so it has no time to add to the spread:
+    # the spread says it covers two runs, and the pass count above shows the failure.
+    spread = summary["measurements"]["alert_raised_after_s:link.lost"]
+    assert spread["runs_measured"] == 2 and spread["max"] < 1.0
+    assert suite_status([])[0] is Status.NOT_RUN
+
+
+def test_the_shipped_suite_lists_scenarios_that_exist() -> None:
+    from aegis.trust.suite import load_suite
+
+    suite = load_suite(REPO_ROOT / "trust/suites/core.json")
+    for name in suite.scenarios:
+        load_scenario(REPO_ROOT / name)

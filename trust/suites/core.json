@@ -1,0 +1,13 @@
+{
+  "schema": "aegis.trust-suite/1",
+  "id": "core",
+  "title": "Detection, evidence and recovery for the five core faults",
+  "scenarios": [
+    "trust/scenarios/link_loss_detection.json",
+    "trust/scenarios/stale_telemetry_detection.json",
+    "trust/scenarios/gnss_loss_detection.json",
+    "trust/scenarios/telemetry_delay_detection.json",
+    "trust/scenarios/bridge_crash_recovery.json"
+  ],
+  "repeats": 3
+}

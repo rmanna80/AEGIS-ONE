@@ -18,12 +18,15 @@ import logging
 import time
 import zipfile
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from aegis.contracts import Severity
 from aegis.hub import TelemetryHub
 from aegis.replay.evidence import MANIFEST_NAME, verify_manifest, write_manifest
 from aegis.security import AuditLog
+
+if TYPE_CHECKING:
+    from aegis.replay.camera_evidence import CameraEvidence
 
 log = logging.getLogger(__name__)
 
@@ -157,6 +160,7 @@ class IncidentManager:
         self._clear_since: float | None = None
         self._task: asyncio.Task[None] | None = None
         self._packaging: set[asyncio.Task[None]] = set()
+        self.camera: CameraEvidence | None = None  # set when a camera is running
 
     # ------------------------------------------------------------------ lifecycle
 
@@ -214,6 +218,8 @@ class IncidentManager:
         }
         self.incidents.append(incident)
         self._open = incident
+        if self.camera is not None:
+            self.camera.begin()
         self._clear_since = None
         log.warning("Incident %s opened: %s", incident["incident_id"], title)
         self.audit.append("incident_opened", incident_id=incident["incident_id"], trigger=trigger)
@@ -260,13 +266,18 @@ class IncidentManager:
         incident["closed_utc_s"] = round(time.time(), 3)
         incident["closed_because"] = reason
         incident["status"] = "packaging"
-        task = asyncio.create_task(asyncio.to_thread(self._package, incident))
+        frames = self.camera.end() if self.camera is not None else []
+        task = asyncio.create_task(asyncio.to_thread(self._package, incident, frames))
         self._packaging.add(task)
         task.add_done_callback(self._packaging.discard)
 
     # ------------------------------------------------------------------- packaging
 
-    def _package(self, incident: dict[str, Any]) -> None:
+    def _package(
+        self,
+        incident: dict[str, Any],
+        frames: list[tuple[float, dict[str, Any], bytes | None]] | None = None,
+    ) -> None:
         assert self.session_dir is not None and self.hub.recorder is not None
         try:
             folder = self.session_dir / "incidents" / incident["incident_id"]
@@ -288,13 +299,30 @@ class IncidentManager:
             (folder / "audit_excerpt.jsonl").write_text("\n".join(audit_records) + "\n")
             (folder / "session.json").write_text(json.dumps(self.session, indent=2))
 
+            camera: dict[str, Any] | None = None
+            if self.camera is not None:
+                utc_start = summary["utc_start_s"] or incident["opened_utc_s"] - self.pre_s
+                utc_end = summary["utc_end_s"] or incident["closed_utc_s"]
+                from aegis.replay.camera_evidence import write_camera_evidence
+
+                camera = write_camera_evidence(
+                    folder,
+                    frames or [],
+                    utc_start - 0.05,
+                    utc_end + 0.05,
+                    self.camera.keep_images,
+                    self.camera.mount,
+                )
+                if self.camera.frames_over_limit:
+                    camera["frames_not_kept_over_the_limit"] = self.camera.frames_over_limit
+
             duration = end - start
             expected = duration / self.hub.period_s
             gap_seconds = sum(g["seconds"] for g in summary["gaps_in_state_records"])
             kept_elsewhere = [
                 name
                 for name in ("video.mp4", "detections.jsonl", "map.npz", "sar_report.json")
-                if (self.session_dir / name).exists()
+                if (self.session_dir / name).exists() and not (folder / name).exists()
             ]
             document = {
                 "schema": INCIDENT_SCHEMA,
@@ -323,6 +351,7 @@ class IncidentManager:
                     "note": "A record without a link holds the last values AEGIS had, "
                     "marked connected=false; it is not a measurement of the vehicle.",
                 },
+                "camera": camera or {"frames": 0, "note": "No camera was running in this session."},
                 "not_in_this_package": {
                     "kept_in_the_session_folder": kept_elsewhere,
                     "never_recorded": [

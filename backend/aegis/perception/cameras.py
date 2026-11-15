@@ -2,7 +2,9 @@
 
 * :class:`VideoFileCameraAdapter` - a saved video file, paced at its own frame rate.
 * :class:`StreamCameraAdapter` - frames pushed over TCP by a small sender process
-  (the Gazebo camera bridge today; a Raspberry Pi camera later).
+  (the Gazebo camera bridge). Frames that claim to be physical are refused: over a
+  socket, provenance is only the sender's say-so.
+* A USB webcam on this computer: :mod:`aegis.perception.usb_camera`.
 
 Frame-stream wire format (one TCP connection, sender -> AEGIS), repeated::
 
@@ -50,6 +52,7 @@ class VideoFileCameraAdapter:
         self.loop = loop
         self.sensor_id = sensor_id
         self.provenance = Provenance.REPLAYED
+        self.mount = "recorded footage"
         self.source = f"video:{path.name}"
         self._capture: cv2.VideoCapture | None = None
         self._frame_id = 0
@@ -135,6 +138,7 @@ class StreamCameraAdapter:
     def __init__(self, host: str = "127.0.0.1", port: int = 5600, timeout_s: float = 1.0) -> None:
         self.host, self.port, self.timeout_s = host, port, timeout_s
         self.sensor_id = "stream-1"
+        self.mount = "vehicle"  # the simulator's camera, on the simulated vehicle
         self.source = f"stream:{port}"
         self._server: asyncio.Server | None = None
         self._latest: CameraFrame | None = None

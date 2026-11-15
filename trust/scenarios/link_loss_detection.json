@@ -68,6 +68,16 @@
       "description": "The record of what AEGIS saw during the event is complete",
       "measure": "incident_completeness_at_least",
       "min_fraction": 0.95
+    },
+    {
+      "id": "C8",
+      "description": "The fault causes no other monitored alert (no false alarms)",
+      "measure": "no_other_alerts"
+    },
+    {
+      "id": "C9",
+      "description": "After the test the operator's Return works; the vehicle lands",
+      "measure": "vehicle_recovered"
     }
   ],
   "random_seed": null,

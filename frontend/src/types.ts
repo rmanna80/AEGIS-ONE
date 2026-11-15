@@ -273,7 +273,26 @@ export type PerceptionStatus =
       faults: string[];
       last_error: string | null;
       recording: string | null;
+      recording_video?: boolean;
+      video_recorded?: boolean;
+      camera_mount?: "vehicle" | "bench" | "recorded footage" | "recorded";
+      camera?: UsbCameraDetails | null;
     };
+
+/** A physical USB camera (mirrors aegis/perception/usb_camera.py details()). */
+export interface UsbCameraDetails {
+  kind: string;
+  device: string | null;
+  mount: string;
+  negotiated: { width?: number; height?: number; fps?: number; format?: string };
+  delivered_fps: number | null;
+  frames_delivered: number;
+  frames_dropped_before_processing: number;
+  driver_to_aegis_delay:
+    | { available: true; median_ms: number; p95_ms: number; note: string }
+    | { available: false; reason: string };
+  last_error: string | null;
+}
 
 // --- Navigation (mirrors backend/aegis/navigation/service.py)
 

@@ -1,0 +1,93 @@
+{
+  "schema": "aegis.trust-scenario/1",
+  "id": "gnss-loss-detection",
+  "title": "Loss of GNSS fix is detected and reported",
+  "purpose": "Without a GNSS fix the position estimate degrades; the operator must be told at once. Requirement R-GNSS-1.",
+  "environment": {
+    "simulator": "px4_sitl",
+    "scenario_id": "open_field",
+    "provenance": "simulated",
+    "needs_fault_injection": true,
+    "devices": [
+      "backend host",
+      "PX4 SITL"
+    ]
+  },
+  "initial_conditions": "Vehicle landed at home, no mission in progress, backend recording, fault injection enabled.",
+  "mission": "demo_mission",
+  "baseline_s": 8.0,
+  "fault": {
+    "kind": "gps_loss",
+    "duration_s": 6.0,
+    "inject_when": "flying_mission"
+  },
+  "expected_behaviour": "A critical gps.no_fix alert within 1 s, cleared within 3 s of the fix returning. The altered data is labelled. The monitors do not command the vehicle. An incident package is produced, verifies and is complete. No other alert. The operator's Return works afterwards.",
+  "criteria": [
+    {
+      "id": "C1",
+      "description": "No monitored alert before the fault",
+      "measure": "no_alert_before_fault"
+    },
+    {
+      "id": "C2",
+      "description": "Loss of fix is alerted quickly",
+      "measure": "alert_raised_within_s",
+      "code": "gps.no_fix",
+      "max_s": 1.0,
+      "safety_critical": true
+    },
+    {
+      "id": "C3",
+      "description": "The alert clears when the fix returns",
+      "measure": "alert_cleared_within_s",
+      "code": "gps.no_fix",
+      "max_s": 3.0
+    },
+    {
+      "id": "C4",
+      "description": "The mission is not interrupted by the monitors",
+      "measure": "mission_phase_in",
+      "phases": [
+        "active",
+        "returning",
+        "completed"
+      ]
+    },
+    {
+      "id": "C5",
+      "description": "The incident is preserved",
+      "measure": "incident_packaged"
+    },
+    {
+      "id": "C6",
+      "description": "The preserved evidence verifies",
+      "measure": "incident_verifies"
+    },
+    {
+      "id": "C7",
+      "description": "The record of what AEGIS saw during the event is complete",
+      "measure": "incident_completeness_at_least",
+      "min_fraction": 0.95
+    },
+    {
+      "id": "C8",
+      "description": "Altered data is labelled",
+      "measure": "snapshot_labelled"
+    },
+    {
+      "id": "C9",
+      "description": "The fault causes no other monitored alert (no false alarms)",
+      "measure": "no_other_alerts"
+    },
+    {
+      "id": "C10",
+      "description": "After the test the operator's Return works; the vehicle lands",
+      "measure": "vehicle_recovered"
+    }
+  ],
+  "random_seed": null,
+  "max_duration_s": 300.0,
+  "limitations": [
+    "Only AEGIS's copy loses the fix. PX4's estimator keeps its real GNSS, so this does not test the vehicle's behaviour without GNSS."
+  ]
+}

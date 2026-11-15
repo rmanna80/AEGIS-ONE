@@ -42,7 +42,11 @@ def evaluate(
         return findings  # everything else would be judged on stale data
 
     age = now_unix_s - state.received_at_unix_s
-    if age > limits.stale_after_s:
+    # A simulator running slower than real time sends proportionally less often. The
+    # limit stretches with it, as the link timeout does. Hardware reports no factor.
+    rtf = state.sim_real_time_factor
+    stale_limit = limits.stale_after_s / max(0.05, min(1.0, rtf)) if rtf else limits.stale_after_s
+    if age > stale_limit:
         findings.append(("telemetry.stale", Severity.CRITICAL, f"Telemetry is {age:.1f} s old."))
         return findings
 

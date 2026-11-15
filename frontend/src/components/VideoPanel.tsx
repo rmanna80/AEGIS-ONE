@@ -83,6 +83,7 @@ function draw(canvas: HTMLCanvasElement, image: ImageBitmap, result: PerceptionR
 
 export function VideoPanel() {
   const status = useStore((s) => s.perception);
+  const flightProvenance = useStore((s) => s.snapshot?.state?.provenance ?? s.system?.provenance);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const latest = useRef<PerceptionResult | null>(null);
   const [result, setResult] = useState<PerceptionResult | null>(null);
@@ -158,6 +159,8 @@ export function VideoPanel() {
   if (!status?.enabled) return null;
   const provenance = result?.provenance ?? status.provenance;
   const noFrames = status.faults.includes("camera.no_frames");
+  const bench = status.camera_mount === "bench";
+  const usb = status.camera;
 
   return (
     <div className="flex h-full flex-col bg-ink-950">
@@ -171,11 +174,27 @@ export function VideoPanel() {
         )}
         <span className="num truncate text-[10px] text-dim">{result?.source ?? status.camera_source}</span>
         {status.recording && (
-          <span className="num ml-auto flex shrink-0 items-center gap-1 text-[10px] text-crit" title={`Detections are being recorded to ${status.recording}`}>
-            <span className="inline-block h-1.5 w-1.5 rounded-full bg-crit" /> REC detections
+          <span
+            className="num ml-auto flex shrink-0 items-center gap-1 text-[10px] text-crit"
+            title={
+              status.recording_video === false
+                ? `Labels and boxes are recorded to ${status.recording}; the video is not saved.`
+                : `Video and detections are being recorded to ${status.recording}`
+            }
+          >
+            <span className="inline-block h-1.5 w-1.5 rounded-full bg-crit" />
+            {status.recording_video === false ? "REC boxes only" : "REC video + detections"}
           </span>
         )}
       </div>
+      {bench && (
+        <p className="border-b border-line bg-crit/10 px-3 py-1.5 text-[11px] text-text">
+          <span className="font-semibold text-crit">Bench camera, not on the vehicle.</span>{" "}
+          Real images from {status.camera?.device ?? "a USB camera"}. They have nothing to do with
+          the {flightProvenance ?? ""} flight on the left. Detection is by object class only; no
+          one is identified.
+        </p>
+      )}
 
       <div className="relative flex min-h-0 flex-1 items-center justify-center bg-black">
         <canvas
@@ -203,6 +222,30 @@ export function VideoPanel() {
         <Stat label="Inference p95" value={fixed(status.inference_latency_ms_p95, 0)} unit="ms" warn={status.faults.includes("inference.slow")} />
         <Stat label="Frame" value={result ? `${result.width_px}×${result.height_px}` : "--"} unit="" />
       </div>
+      {usb && (
+        <div className="num grid grid-cols-4 gap-px border-b border-line bg-line text-[11px]">
+          <Stat label="Camera delivers" value={fixed(usb.delivered_fps, 1)} unit="fps" />
+          <Stat
+            label="Not processed"
+            value={
+              usb.frames_delivered
+                ? `${Math.round((100 * usb.frames_dropped_before_processing) / usb.frames_delivered)}`
+                : "--"
+            }
+            unit="%"
+          />
+          <Stat
+            label="Driver→AEGIS"
+            value={usb.driver_to_aegis_delay.available ? fixed(usb.driver_to_aegis_delay.median_ms, 0) : "n/a"}
+            unit={usb.driver_to_aegis_delay.available ? "ms" : ""}
+          />
+          <Stat
+            label="Format"
+            value={usb.negotiated.format ? `${usb.negotiated.format} ${usb.negotiated.width}×${usb.negotiated.height}` : "--"}
+            unit=""
+          />
+        </div>
+      )}
 
       <div className="h-32 shrink-0 overflow-y-auto px-3 py-2">
         <div className="mb-1 flex items-center justify-between">

@@ -17,6 +17,7 @@ from types import SimpleNamespace
 from typing import Any, Protocol
 
 import cv2
+import numpy as np
 
 from aegis.contracts import Provenance
 from aegis.perception.pipeline import DETECTIONS_FILE, VIDEO_FILE, VideoMessage, encode_jpeg
@@ -32,8 +33,10 @@ class RecordedPerceptionPlayer:
     def __init__(self, session_dir: Path, clock: ReplayClock, flight_started_at_unix_s: float):
         detections = session_dir / DETECTIONS_FILE
         self._video_path = session_dir / VIDEO_FILE
-        if not detections.is_file() or not self._video_path.is_file():
+        if not detections.is_file():
             raise FileNotFoundError(f"{session_dir} has no recorded camera data")
+        # A physical camera's video is not saved by default; its labels and boxes are.
+        self.has_video = self._video_path.is_file()
         self._records: list[dict[str, Any]] = []
         with detections.open(encoding="utf-8") as f:
             for line in f:
@@ -72,6 +75,10 @@ class RecordedPerceptionPlayer:
     def _open(self) -> None:
         if self._capture is not None:
             self._capture.release()
+            self._capture = None
+        self._next = 0
+        if not self.has_video:
+            return
         self._capture = cv2.VideoCapture(str(self._video_path))
         if not self._capture.isOpened():
             raise RuntimeError(f"OpenCV could not open {self._video_path}")
@@ -115,14 +122,20 @@ class RecordedPerceptionPlayer:
         due = self._next
         while due < len(self._records) and self._records[due]["captured_at_unix_s"] <= target:
             due += 1
-        if due == self._next or self._capture is None:
+        if due == self._next:
             return False
-        # Frames are stored in order; skip the ones that are already in the past.
-        for _ in range(due - self._next - 1):
-            self._capture.grab()
-        ok, image = self._capture.read()
-        self._next = due
-        if not ok:
+        if self._capture is not None:
+            # Frames are stored in order; skip the ones that are already in the past.
+            for _ in range(due - self._next - 1):
+                self._capture.grab()
+            ok, image = self._capture.read()
+            self._next = due
+            if not ok:
+                return False
+        elif not self.has_video:
+            self._next = due
+            image = placeholder(self._records[due - 1])
+        else:
             return False
 
         record = dict(self._records[due - 1])
@@ -162,4 +175,26 @@ class RecordedPerceptionPlayer:
             "last_error": None,
             "recording": None,
             "recorded_frames": len(self._records),
+            "video_recorded": self.has_video,
+            "camera_mount": "recorded",
+            "camera": None,
         }
+
+
+def placeholder(record: dict[str, Any]) -> Any:
+    """A plain frame of the recorded size, for sessions whose video was not saved.
+    The dashboard draws the recorded boxes on it."""
+    width, height = int(record.get("width_px", 640)), int(record.get("height_px", 480))
+    image = np.full((height, width, 3), 40, dtype=np.uint8)
+    for i, line in enumerate(("Video not recorded", "(physical camera: labels and boxes only)")):
+        cv2.putText(
+            image,
+            line,
+            (16, 36 + 28 * i),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.7,
+            (170, 170, 170),
+            1,
+            cv2.LINE_AA,
+        )
+    return image

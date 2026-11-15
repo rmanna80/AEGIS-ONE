@@ -24,10 +24,19 @@ from aegis.trust.contracts import (
     Scenario,
     Status,
     TestResult,
+    alert_key,
     overall,
 )
 
-MONITORED_PREFIXES = ("nav.", "telemetry.", "battery.implausible", "control.", "security.", "link.")
+MONITORED_PREFIXES = (
+    "nav.",
+    "telemetry.",
+    "battery.implausible",
+    "control.",
+    "security.",
+    "link.",
+    "gps.",
+)
 
 
 class ApiClient(Protocol):
@@ -48,6 +57,7 @@ class Runner:
         log: Callable[[str], None] = print,
     ) -> None:
         self.api, self.sleep, self.clock, self.log = api, sleep, clock, log
+        self._criteria: list[Criterion] = []
 
     # ---------------------------------------------------------------- environment
 
@@ -99,6 +109,7 @@ class Runner:
     # ------------------------------------------------------------------------ run
 
     def run(self, scenario: Scenario, scenario_sha256: str) -> TestResult:
+        self._criteria = scenario.criteria
         started_utc = time.time()
         started = self.clock()
         session = self.api.call("/api/replay/session")
@@ -191,15 +202,23 @@ class Runner:
         # ---- fault and measurements
         fault = scenario.fault
         incidents_before = {i["incident_id"] for i in self.api.call("/api/incidents")["incidents"]}
+        restarts_before = self.api.call("/api/health").get("bridge_restarts")
         self.api.call(
             "/api/faults", {"kind": fault.kind, "duration_s": fault.duration_s, **fault.parameters}
         )
         injected_at = self.clock()
         self.log(f"  fault '{fault.kind}' injected for {fault.duration_s:g} s")
         labelled = False
+        seen: set[str] = set()
+        modes: set[str] = set()
         raised: dict[str, float] = {}
         cleared: dict[str, float] = {}
-        watched = {c.code for c in scenario.criteria if c.code}
+        # Each alert criterion watches one alert, or any of several (key -> codes).
+        watched = {
+            key: set(c.codes or [c.code or ""])
+            for c in scenario.criteria
+            if (key := alert_key(c)) is not None
+        }
         horizon = fault.duration_s + max(
             [c.max_s or 0.0 for c in scenario.criteria if c.measure == "alert_cleared_within_s"]
             + [5.0]
@@ -210,20 +229,33 @@ class Runner:
             if snapshot["state"] and snapshot["state"].get("injected_faults"):
                 labelled = True
             active = {a["code"] for a in snapshot["alerts"]}
-            for code in watched:
-                if code in active and code not in raised:
-                    raised[code] = elapsed
-                gone = code in raised and code not in active and code not in cleared
+            seen |= {code for code in active if code.startswith(MONITORED_PREFIXES)}
+            state = snapshot["state"]
+            if state and state.get("connected") and state.get("flight_mode"):
+                modes.add(str(state["flight_mode"]))  # only what the autopilot really reported
+            for key, codes in watched.items():
+                on = bool(codes & active)
+                if on and key not in raised:
+                    raised[key] = elapsed
+                gone = key in raised and not on and key not in cleared
                 if gone and elapsed >= fault.duration_s:
-                    cleared[code] = elapsed - fault.duration_s
+                    cleared[key] = elapsed - fault.duration_s
             self.sleep(0.2)
         measurements["alert_raised_after_s"] = {k: round(v, 2) for k, v in raised.items()}
         measurements["alert_cleared_after_fault_end_s"] = {
             k: round(v, 2) for k, v in cleared.items()
         }
         measurements["snapshot_labelled_during_fault"] = labelled
+        measurements["alerts_during_fault"] = sorted(seen)
+        measurements["flight_modes_during_fault"] = sorted(modes)
         phase_after = self.api.call("/api/state")["mission"]["phase"]
         measurements["mission_phase_after_fault"] = phase_after
+        restarts_after = self.api.call("/api/health").get("bridge_restarts")
+        measurements["bridge_restarts_during_fault"] = (
+            None
+            if restarts_before is None or restarts_after is None
+            else restarts_after - restarts_before
+        )
 
         # ---- incident evidence
         incident: dict[str, Any] | None = None
@@ -261,10 +293,10 @@ class Runner:
         )
         measurements["incident_verifies"] = bool(verification and verification["valid"])
 
-        # ---- evaluate, then put the vehicle back
-        criteria = [self._evaluate(c, measurements) for c in scenario.criteria]
+        # ---- put the vehicle back (the operator's Return), then evaluate
         if flying:
             measurements["landed_after_test"] = self._recover()
+        criteria = [self._evaluate(c, measurements) for c in scenario.criteria]
         status, why = overall(criteria)
         return finish(status, why, criteria)
 
@@ -283,16 +315,25 @@ class Runner:
     @staticmethod
     def _expected(c: Criterion) -> str:
         if c.measure == "alert_raised_within_s":
-            return f"alert {c.code} within {c.max_s:g} s of the fault"
+            return f"alert {alert_key(c)} within {c.max_s:g} s of the fault"
         if c.measure == "alert_cleared_within_s":
-            return f"alert {c.code} clears within {c.max_s:g} s of the fault ending"
+            return f"alert {alert_key(c)} clears within {c.max_s:g} s of the fault ending"
         if c.measure == "mission_phase_in":
             return f"mission phase is one of {c.phases}"
         if c.measure == "no_alert_before_fault":
             return (
                 f"no alert starting with {c.prefixes or list(MONITORED_PREFIXES)} before the fault"
             )
+        if c.measure == "no_other_alerts":
+            return "no monitored alert other than the ones this fault should cause" + (
+                f" (also allowed: {c.allowed})" if c.allowed else ""
+            )
+        if c.measure == "flight_mode_throughout":
+            return f"whenever connected, the autopilot reports one of {c.modes}"
         return {
+            "bridge_restarted": "AEGIS notices the dead bridge and restarts it",
+            "vehicle_recovered": "after the test, the operator's Return is accepted and the "
+            "vehicle lands and disarms",
             "incident_packaged": "an incident package is produced",
             "incident_verifies": "the incident package verifies against its manifest",
             "snapshot_labelled": "altered data is labelled as injected",
@@ -309,20 +350,21 @@ class Runner:
                 safety_critical=c.safety_critical,
             )
 
+        key = alert_key(c)
         if c.measure == "alert_raised_within_s":
-            seen = m["alert_raised_after_s"].get(c.code)
+            seen = m["alert_raised_after_s"].get(key)
             if seen is None:
-                return result(Status.FAIL, f"{c.code} was never raised")
+                return result(Status.FAIL, f"{key} was never raised")
             ok = seen <= (c.max_s or 0.0)
             return result(Status.PASS if ok else Status.FAIL, f"raised after {seen:.2f} s")
         if c.measure == "alert_cleared_within_s":
-            if c.code not in m["alert_raised_after_s"]:
+            if key not in m["alert_raised_after_s"]:
                 return result(
-                    Status.INCONCLUSIVE, f"{c.code} was never raised, so clearing is undefined"
+                    Status.INCONCLUSIVE, f"{key} was never raised, so clearing is undefined"
                 )
-            seen = m["alert_cleared_after_fault_end_s"].get(c.code)
+            seen = m["alert_cleared_after_fault_end_s"].get(key)
             if seen is None:
-                return result(Status.FAIL, f"{c.code} was still active when measurement ended")
+                return result(Status.FAIL, f"{key} was still active when measurement ended")
             ok = seen <= (c.max_s or 0.0)
             return result(
                 Status.PASS if ok else Status.FAIL, f"cleared {seen:.2f} s after the fault ended"
@@ -350,6 +392,31 @@ class Runner:
             return result(
                 Status.PASS if ok else Status.FAIL,
                 "manifest verified" if ok else "verification failed",
+            )
+        if c.measure == "no_other_alerts":
+            expected = {code for x in self._criteria for code in (x.codes or [x.code or ""])}
+            expected.discard("")
+            expected |= set(c.allowed or [])
+            other = sorted(set(m["alerts_during_fault"]) - expected)
+            return result(Status.FAIL if other else Status.PASS, f"other alerts: {other or 'none'}")
+        if c.measure == "flight_mode_throughout":
+            reported = m["flight_modes_during_fault"]
+            if not reported:
+                return result(Status.INCONCLUSIVE, "no flight mode was reported")
+            outside = sorted(set(reported) - set(c.modes or []))
+            return result(Status.FAIL if outside else Status.PASS, f"modes reported: {reported}")
+        if c.measure == "bridge_restarted":
+            count = m["bridge_restarts_during_fault"]
+            if count is None:
+                return result(Status.INCONCLUSIVE, "this backend does not report restarts")
+            return result(Status.PASS if count >= 1 else Status.FAIL, f"{count} restart(s)")
+        if c.measure == "vehicle_recovered":
+            landed = m.get("landed_after_test")
+            if landed is None:
+                return result(Status.INCONCLUSIVE, "the scenario did not fly")
+            return result(
+                Status.PASS if landed else Status.FAIL,
+                "landed and disarmed" if landed else "did not land and disarm in 240 s",
             )
         if c.measure == "incident_completeness_at_least":
             fraction = m.get("incident_state_record_fraction")

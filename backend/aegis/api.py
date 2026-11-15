@@ -38,7 +38,7 @@ from aegis import __version__
 from aegis.adapters.px4_sitl import NotAttestedError, PX4SITLAdapter
 from aegis.anomaly import AnomalyMonitor
 from aegis.config import OperatingMode, Settings
-from aegis.contracts import Alert, Severity
+from aegis.contracts import Alert, Provenance, Severity
 from aegis.device import DeviceMonitor
 from aegis.faults import KINDS as FAULT_KINDS
 from aegis.faults import FaultInjector, FaultRequest
@@ -223,13 +223,17 @@ def build_perception(
     if settings.mode is OperatingMode.REPLAY:
         source = hub.source
         try:
+            if not isinstance(source, RecordedTelemetryAdapter):
+                return None, "The recording being replayed has no camera data."
+            # Camera data lives next to the replayed file: a session folder, or an
+            # incident package.
             session = settings.resolved_replay_session()
-            if session is None or not isinstance(source, RecordedTelemetryAdapter):
+            folder = session if session is not None else source.path.parent
+            if not (folder / "detections.jsonl").is_file():
                 return None, "The recording being replayed has no camera data."
             from aegis.perception.playback import RecordedPerceptionPlayer
 
-            started = float(source.header["started_at_unix_s"])
-            return RecordedPerceptionPlayer(session, source, started), ""
+            return RecordedPerceptionPlayer(folder, source, source.wall_clock_at_t0()), ""
         except ImportError as exc:
             return None, f"Perception dependencies are not installed ({exc.name}); see README."
         except (OSError, ValueError, RuntimeError, KeyError) as exc:
@@ -250,6 +254,15 @@ def build_perception(
             camera = StreamCameraAdapter(settings.camera_stream_host, settings.camera_stream_port)
         elif settings.camera.startswith("video:"):
             camera = VideoFileCameraAdapter(Path(settings.camera.removeprefix("video:")))
+        elif settings.camera == "usb" or settings.camera.startswith("usb:"):
+            from aegis.perception.usb_camera import UsbCameraAdapter
+
+            camera = UsbCameraAdapter(
+                settings.camera,
+                settings.camera_width,
+                settings.camera_height,
+                settings.camera_fps,
+            )
         else:
             return None, f"Unknown AEGIS_CAMERA value {settings.camera!r}."
         detector = OnnxYoloBackend(
@@ -260,7 +273,15 @@ def build_perception(
         )
     except (OSError, ValueError, RuntimeError) as exc:
         return None, str(exc)
-    return PerceptionPipeline(camera, detector, record_dir=record_dir), ""
+    physical = getattr(camera, "provenance", None) is Provenance.PHYSICAL
+    record_video = settings.record_camera_video == "always" or (
+        settings.record_camera_video == "auto" and not physical
+    )
+    if record_dir is not None and not record_video:
+        log.info("Camera video is not saved (physical camera); detections are recorded.")
+    return PerceptionPipeline(
+        camera, detector, record_dir=record_dir, record_video=record_video
+    ), ""
 
 
 def build_hub(settings: Settings, record_dir: Path | None = None) -> TelemetryHub:
@@ -364,6 +385,18 @@ def create_app(
     sar, sar_off_reason = build_sar(settings, hub, scenario, record_dir, fleet.hubs[1:])
     if sar is not None:
         hub.extra_checks.append(sar.findings)
+    listeners = getattr(perception, "frame_listeners", None)  # a live camera, not playback
+    if listeners is not None and incidents.enabled:
+        # Keep the camera's recent past so an incident package can include it. (Imported
+        # here: the camera stack is optional and needs OpenCV.)
+        from aegis.replay.camera_evidence import CameraEvidence
+
+        evidence = CameraEvidence(
+            pre_s=incidents.pre_s, keep_images=bool(getattr(perception, "record_video", False))
+        )
+        evidence.mount = getattr(getattr(perception, "camera", None), "mount", None)
+        listeners.append(evidence.observe)
+        incidents.camera = evidence
     if perception is not None:
         pipeline = perception
 
@@ -498,6 +531,7 @@ def create_app(
             "longest_stall_s": round(watchdog.longest_stall_s, 1),
             "system": system_snapshot(),
             "vehicle_connected": bool(state and state.connected),
+            "bridge_restarts": getattr(hub.source, "bridge_restarts", None),
         }
 
     @app.get("/api/system")
@@ -777,6 +811,14 @@ def create_app(
             if simulate is None:
                 raise HTTPException(409, "This vehicle adapter cannot simulate an outside command.")
             await simulate()
+        elif request.kind == "bridge_crash":
+            crash = getattr(hub.source, "crash_bridge_for_test", None)
+            if crash is None:
+                raise HTTPException(409, "This vehicle adapter has no bridge process to crash.")
+            try:
+                crash()
+            except RuntimeError as exc:
+                raise HTTPException(409, str(exc)) from exc
         else:
             try:
                 faults.inject(request)

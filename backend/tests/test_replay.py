@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import time
 from pathlib import Path
 
 import pytest
@@ -344,3 +345,139 @@ async def test_pause_seek_and_speed(tmp_path: Path) -> None:
             adapter.set_speed(0.0)
     finally:
         await adapter.stop()
+
+
+# ------------------------------------------------------------ camera evidence
+
+
+def camera_payload(at: float, frame_id: int, provenance: str = "simulated") -> dict[str, object]:
+    return {
+        "frame_id": frame_id,
+        "captured_at_unix_s": at,
+        "provenance": provenance,
+        "source": "stream:test",
+        "detector": "test",
+        "width_px": 160,
+        "height_px": 120,
+        "detections": [],
+        "tracks": [],
+    }
+
+
+def camera_image(frame_id: int) -> object:
+    import numpy as np
+
+    image = np.zeros((120, 160, 3), np.uint8)
+    image[40:80, frame_id % 100 : frame_id % 100 + 40] = 255
+    return image
+
+
+def test_camera_buffer_keeps_the_recent_past_then_everything_while_open() -> None:
+    pytest.importorskip("cv2")
+    from aegis.replay.camera_evidence import CameraEvidence
+
+    evidence = CameraEvidence(pre_s=1.0, max_frames=25)
+    for i in range(30):  # 3 s at 10 frames per second
+        evidence.observe(camera_payload(100.0 + i * 0.1, i), camera_image(i))
+    evidence.begin()  # only the last second comes along
+    for i in range(30, 50):
+        evidence.observe(camera_payload(100.0 + i * 0.1, i), camera_image(i))
+    frames = evidence.end()
+    ids = [payload["frame_id"] for _, payload, _ in frames]
+    assert ids[0] >= 19 and ids == sorted(ids)
+    assert len(frames) == 25 and evidence.frames_over_limit > 0  # bounded, and says so
+    assert all(jpeg for _, _, jpeg in frames)
+    assert evidence.end() == []
+
+
+def test_a_physical_camera_buffer_keeps_no_images() -> None:
+    pytest.importorskip("cv2")
+    from aegis.replay.camera_evidence import CameraEvidence
+
+    evidence = CameraEvidence(keep_images=False)
+    evidence.begin()
+    evidence.observe(camera_payload(1.0, 1, "physical"), camera_image(1))
+    [(_, _, jpeg)] = evidence.end()
+    assert jpeg is None
+
+
+async def test_an_incident_package_carries_the_camera_inside_its_window(tmp_path: Path) -> None:
+    pytest.importorskip("cv2")
+    import cv2
+
+    from aegis.perception.playback import RecordedPerceptionPlayer
+    from aegis.replay.camera_evidence import CameraEvidence
+
+    hub, vehicle, manager, _ = await session(tmp_path)
+    manager.camera = CameraEvidence(pre_s=5.0)
+    manager.camera.mount = "vehicle"
+    early = time.time() - 60.0  # long before the incident: must not be packaged
+    manager.camera.observe(camera_payload(early, 0), camera_image(0))
+    frame = 1
+
+    async def fly_with_camera(ticks: int, **overrides: object) -> None:
+        nonlocal frame
+        vehicle.overrides = dict(overrides)
+        for _ in range(ticks):
+            await hub.tick()
+            assert manager.camera is not None
+            manager.camera.observe(camera_payload(time.time(), frame), camera_image(frame))
+            frame += 1
+            await asyncio.sleep(0.01)
+
+    await fly_with_camera(10)
+    await fly_with_camera(15, connected=False)
+    await manager.step()
+    await fly_with_camera(10)
+    await manager.step()
+    await fly_with_camera(10)
+    await manager.step()
+    incident = await wait_packaged(manager)
+    assert incident["status"] == "packaged", incident
+
+    folder = Path(str(incident["folder"]))
+    document = json.loads((folder / "incident.json").read_text())
+    camera = document["camera"]
+    rows = [json.loads(x) for x in (folder / "detections.jsonl").read_text().splitlines()]
+    assert camera["frames"] == len(rows) >= 20 and camera["video"] == "video.mp4"
+    assert all(row["frame_id"] != 0 for row in rows)  # the frame from a minute ago is out
+    assert camera["mount"] == "vehicle"
+    capture = cv2.VideoCapture(str(folder / "video.mp4"))
+    assert int(capture.get(cv2.CAP_PROP_FRAME_COUNT)) == len(rows)  # one frame per row
+    capture.release()
+    assert "video.mp4" not in document["not_in_this_package"]["kept_in_the_session_folder"]
+    assert verify_manifest(folder)["valid"]
+
+    # The camera replays with the incident, on the incident's own clock.
+    adapter = RecordedTelemetryAdapter(folder / "events.jsonl", loop=False)
+    player = RecordedPerceptionPlayer(folder, adapter, adapter.wall_clock_at_t0())
+    player._open()  # what start() does, without its background loop
+    queue = player.subscribe()
+    adapter.seek(adapter.duration_s)
+    assert player.step()
+    record, _ = queue.get_nowait()
+    assert record["provenance"] == "replayed" and record["recorded_provenance"] == "simulated"
+
+
+async def test_a_physical_camera_incident_has_boxes_and_says_why_there_is_no_video(
+    tmp_path: Path,
+) -> None:
+    pytest.importorskip("cv2")
+    from aegis.replay.camera_evidence import CameraEvidence
+
+    hub, vehicle, manager, _ = await session(tmp_path)
+    manager.camera = CameraEvidence(pre_s=5.0, keep_images=False)
+    manager.camera.mount = "bench"
+    await fly(hub, vehicle, 5)
+    marked = manager.mark("bench test")
+    assert marked is not None
+    for i in range(10):
+        manager.camera.observe(camera_payload(time.time(), i, "physical"), camera_image(i))
+        await fly(hub, vehicle, 1)
+    await manager.stop()
+    folder = Path(str(manager.incidents[-1]["folder"]))
+    camera = json.loads((folder / "incident.json").read_text())["camera"]
+    assert camera["frames"] == 10 and camera["video"] is None
+    assert "physical camera" in camera["why_no_video"]
+    assert camera["provenance"] == "physical" and camera["mount"] == "bench"
+    assert not (folder / "video.mp4").exists()

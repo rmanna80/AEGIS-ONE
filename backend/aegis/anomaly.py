@@ -162,8 +162,12 @@ class AnomalyMonitor:
         if previous is not None and self._frame_moved(previous, state):
             self._samples.clear()
 
-        # --- frozen
-        if previous is not None and self._same_content(previous, state):
+        # --- frozen: new data keeps arriving but says the same thing. When no new data
+        # arrives at all, that is a stall, reported by the stale-data check instead.
+        stalled = previous is not None and state.received_at_unix_s == previous.received_at_unix_s
+        if stalled:
+            self._last_change_wall = now
+        elif previous is not None and self._same_content(previous, state):
             if state.in_air and now - self._last_change_wall > limits.frozen_after_s:
                 self._raise(
                     "telemetry.frozen",

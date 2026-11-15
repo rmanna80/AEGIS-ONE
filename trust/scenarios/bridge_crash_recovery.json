@@ -1,0 +1,107 @@
+{
+  "schema": "aegis.trust-scenario/1",
+  "id": "bridge-crash-recovery",
+  "title": "AEGIS recovers when its MAVLink bridge process crashes in flight",
+  "purpose": "The MAVSDK bridge is a separate process; if it dies AEGIS loses its view and its commands. AEGIS must say so at once, restart it, report honestly what it no longer knows, and give the operator back working commands. Requirement R-CRASH-1.",
+  "environment": {
+    "simulator": "px4_sitl",
+    "scenario_id": "open_field",
+    "provenance": "simulated",
+    "needs_fault_injection": true,
+    "devices": [
+      "backend host",
+      "PX4 SITL"
+    ]
+  },
+  "initial_conditions": "Vehicle landed at home, no mission in progress, backend recording, fault injection enabled.",
+  "mission": "demo_mission",
+  "baseline_s": 8.0,
+  "fault": {
+    "kind": "bridge_crash",
+    "duration_s": 1.0,
+    "inject_when": "flying_mission"
+  },
+  "expected_behaviour": "The bridge process is killed (SIGKILL). Data stops arriving; within 3 s AEGIS raises telemetry.stale (data older than 2 s) or, if the outage outlasts the 3 s link timeout, link.lost. AEGIS restarts the bridge and the alert clears within 30 s. PX4 keeps flying its mission throughout. AEGIS marks the mission as no longer tracked instead of showing stale progress. The incident package is produced, verifies and is complete. No other alert (in particular not telemetry.frozen, which would misdiagnose a stall as data that keeps arriving unchanged). After recovery the operator's Return is accepted and the vehicle lands.",
+  "criteria": [
+    {
+      "id": "C1",
+      "description": "No monitored alert before the crash",
+      "measure": "no_alert_before_fault"
+    },
+    {
+      "id": "C2",
+      "description": "The operator is told data has stopped arriving",
+      "measure": "alert_raised_within_s",
+      "max_s": 3.0,
+      "safety_critical": true,
+      "codes": [
+        "link.lost",
+        "telemetry.stale"
+      ]
+    },
+    {
+      "id": "C3",
+      "description": "AEGIS restarts the bridge",
+      "measure": "bridge_restarted"
+    },
+    {
+      "id": "C4",
+      "description": "Data is current again within 30 s",
+      "measure": "alert_cleared_within_s",
+      "max_s": 30.0,
+      "codes": [
+        "link.lost",
+        "telemetry.stale"
+      ]
+    },
+    {
+      "id": "C5",
+      "description": "PX4 keeps flying its mission throughout",
+      "measure": "flight_mode_throughout",
+      "modes": [
+        "MISSION"
+      ]
+    },
+    {
+      "id": "C6",
+      "description": "AEGIS reports it lost track of the mission instead of showing stale progress",
+      "measure": "mission_phase_in",
+      "phases": [
+        "failed"
+      ]
+    },
+    {
+      "id": "C7",
+      "description": "After recovery the operator's Return works; the vehicle lands",
+      "measure": "vehicle_recovered",
+      "safety_critical": true
+    },
+    {
+      "id": "C8",
+      "description": "The incident is preserved",
+      "measure": "incident_packaged"
+    },
+    {
+      "id": "C9",
+      "description": "The preserved evidence verifies",
+      "measure": "incident_verifies"
+    },
+    {
+      "id": "C10",
+      "description": "The record of what AEGIS saw during the event is complete",
+      "measure": "incident_completeness_at_least",
+      "min_fraction": 0.95
+    },
+    {
+      "id": "C11",
+      "description": "The crash causes no other monitored alert",
+      "measure": "no_other_alerts"
+    }
+  ],
+  "random_seed": null,
+  "max_duration_s": 400.0,
+  "limitations": [
+    "One way for the bridge to fail (killed outright). A bridge that hangs, or answers slowly, is not tested.",
+    "The autopilot is never touched; this tests AEGIS's recovery, not the vehicle's."
+  ]
+}

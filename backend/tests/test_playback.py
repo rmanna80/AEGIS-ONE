@@ -134,7 +134,7 @@ def test_replay_of_a_flight_only_session_reports_no_camera(tmp_path: Path) -> No
     )
     with TestClient(create_app(settings)) as client:
         status = client.get("/api/perception").json()
-        assert status["enabled"] is False and "no recorded camera data" in status["reason"]
+        assert status["enabled"] is False and "no camera data" in status["reason"]
         assert client.get("/api/health").json()["status"] == "ok"
 
     with pytest.raises(ValueError, match="not a recorded session"):
