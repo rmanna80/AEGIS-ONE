@@ -281,3 +281,17 @@ def test_the_reader_thread_does_not_outlive_stop() -> None:
 
     asyncio.run(run())
     assert not any(t.name == "usb-camera" for t in threading.enumerate())
+
+
+async def test_the_detector_rate_limit_holds_and_still_shows_current_frames() -> None:
+    """AEGIS_DETECTOR_MAX_FPS: on the Pi the detector otherwise uses every core it can."""
+    camera, _ = adapter_for(FakeCapture(fps=100.0))
+    pipeline = PerceptionPipeline(camera, BrightBlobDetector(), max_fps=5.0)
+    await pipeline.start()
+    await asyncio.sleep(1.5)
+    processed = pipeline.frames_processed
+    latest = pipeline.latest
+    await pipeline.stop()
+    assert 6 <= processed <= 9  # about 5 per second, not ~100
+    assert latest is not None and time.time() - latest.captured_at_unix_s < 0.5
+    assert pipeline.status()["max_fps"] == 5.0

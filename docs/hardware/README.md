@@ -43,7 +43,7 @@ spin real motors. It needs the same gating as flight and has none yet.
 | Flight controller | `VehicleTelemetrySource`, `MissionExecutor` | PX4 over MAVLink (MAVSDK) | Verified in simulation; physical read-only path unit-tested only |
 | Recorded flight | `VehicleTelemetrySource` | `RecordedTelemetryAdapter` | Verified in simulation |
 | RGB camera | `CameraSource` | TCP frame stream (Gazebo bridge), video file | Verified in simulation |
-| USB webcam (physical, bench) | `CameraSource` | `UsbCameraAdapter` (Video4Linux) | Unit-tested against a stand-in device; not yet run on a real webcam |
+| USB webcam (physical, bench) | `CameraSource` | `UsbCameraAdapter` (Video4Linux) | Hardware-tested: ran on the owner's Pi 5 during a simulated flight |
 | AI camera / detector | `InferenceBackend` | YOLO via ONNX Runtime (CPU) | Verified in simulation; timed on the Pi 5 with synthetic input |
 | Depth sensor | `DepthSource` | Software ray caster, TCP depth stream (Gazebo) | Verified in simulation |
 | Thermal sensor | `ThermalSource` | Software thermal model | Verified in simulation |
@@ -91,20 +91,42 @@ Topology tested: backend on the Pi, PX4 SITL on a PC, MAVLink over the LAN.
 | Demo 1 (survey) with the Pi in the loop | 5 of 5, 140 s | `scripts/demo1_survey.py` |
 | Demo 3 (thermal search) with the Pi in the loop | 8 of 8, 223 s | `scripts/demo3_sar.py` |
 | Link loss when the simulator was restarted without the companion link | Detected; flight stalled at waypoint 4 of 5 | Backend log |
+| Demo 1 with the USB webcam and detector running on the Pi | 5 of 5 | `demo1_survey.py`, 2026-11-14 |
+| CPU during that flight (all 4 cores) | 92% median, 98% p95, 99.8% max | `edge_measure.py`, 90 s |
+| Temperature during that flight | 59.5 °C median, 60.6 °C max; no throttling or under-voltage flags | same |
+| Memory available | 5.9 GB median of 8 GB | same |
+| Backend loop lag | 1 ms median, 9 ms max | same |
+| Age of the vehicle data when read | 57 ms median, 118 ms max | same |
+| Detector on live webcam frames, in flight | 2.7 frames/s processed (median); 335 ms median, 387 ms p95 per frame, with the default 2 threads | same |
+| MAVSDK port closed to the network | From the PC: connected before `lock_mavsdk_port.sh`, timed out after | `nc -zv`, 2026-11-14 |
+
+Reading those numbers:
+
+- **The detector takes almost all the CPU.** It runs as fast as it can, and on the Pi that
+  leaves about 8% of the processor free. Nothing suffered in this run (the backend's loop
+  lag stayed under 10 ms and the data stayed fresh), but there is no headroom for mapping
+  or thermal search at the same time. `AEGIS_DETECTOR_MAX_FPS` now caps the detector.
+- **Detection is half the speed of the benchmark** (335 ms vs 158 ms). The backend gives
+  the detector half the cores, a default meant for a PC that also runs the simulator; the
+  benchmark used all four. On the Pi `AEGIS_DETECTOR_THREADS=4` is worth measuring.
+- **Two figures from that run are not usable.** The measurement script sampled once a
+  second instead of ten times, because its ping to the PC waited a second for an answer
+  that never came (Windows blocks ping by default). The "updates per second" it printed
+  (1.05) was the sampling rate, not the data rate; the data age (57 ms) shows updates were
+  arriving far more often. The script now pings on its own thread and says when its
+  sampling is too slow to judge the rate. The network round trip was not measured.
 
 ### Not verified on the Pi
 
 | Item | Why it matters |
 | --- | --- |
-| CPU and memory use during a flight | The benchmark ran workloads singly, with nothing else running |
-| Camera frame rate and detection time in flight | Demo 2 was never run on the Pi; 158 ms per frame suggests about 6 frames per second at best |
+| How often fresh vehicle data arrives on the Pi, and the network round trip | The first run's sampling was too slow (see above) and the PC does not answer ping |
+| The webcam's negotiated format and delivered frame rate | `camera_check.py` output not yet recorded |
+| CPU with the detector capped, or with 4 detector threads | Not yet measured |
 | Depth mapping in flight (Demo 4) | Needs Gazebo on the PC streaming depth to the Pi |
 | Temperature over a long run, in an enclosure, without a fan | The benchmark lasted about a minute |
-| Network round trip and telemetry arrival rate over Wi-Fi | Only wired/home LAN use so far, unmeasured |
 | Demos 5 and 6, the TRUST scenarios, incident capture | Not run on the Pi |
 | The systemd unit (`deploy/aegis-backend.service`) | Written, never installed |
-| The USB webcam on the Pi: format, delivered frame rate, detection time on live frames | Adapter written; `scripts/camera_check.py` is the check |
-| The MAVSDK port blocked from another computer | `scripts/lock_mavsdk_port.sh` written; rule tested on the development machine, never from a second computer |
 | Any flight controller, any radio attached to the Pi | None owned or connected |
 | Power from a flight battery / BEC | Bench supply only |
 
@@ -166,11 +188,11 @@ integration. Before a physical flight controller is even connected for monitorin
 | Commands impossible against a non-simulator | Implemented, unit-tested. Never exercised against real hardware |
 | Read-only monitoring mode | Implemented. Never exercised against real hardware |
 | Data labelled `physical` and visibly different in the UI | Implemented, unit-tested |
-| MAVSDK control port closed to other computers | **Partly.** The server cannot be bound to localhost; `scripts/lock_mavsdk_port.sh` adds a firewall rule. Not yet checked from a second computer |
+| MAVSDK control port closed to other computers | **Done on the owner's Pi, checked from a second computer.** The server cannot be bound to localhost; `scripts/lock_mavsdk_port.sh` adds a firewall rule. Lost on reboot unless `deploy/aegis-firewall.service` is installed |
 | MAVLink 2 message signing | **Not possible with PX4 v1.17** (no signing in its MAVLink module) |
 | Serial (UART) connection configuration and documentation | **Not done** (UDP only so far) |
 | Bench procedure with propellers removed | **Not written** |
-| Physical camera adapter | USB webcam adapter written (bench only); not yet run on a real camera |
+| Physical camera adapter | USB webcam adapter (bench only), run on the owner's Pi 5 with a real webcam |
 | Recorded physical telemetry replayed through every monitor to check for false alarms | **No such recording exists** |
 | Independent review of this gating | **None** |
 

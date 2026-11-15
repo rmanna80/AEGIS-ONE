@@ -43,13 +43,13 @@ running the backend, flying a simulated vehicle.
 | Scenario runner and results (AEGIS TRUST) | Verified in simulation | Today: 2 scenarios, PASS on all 7 criteria each; 15 unit tests | Two scenarios; one run each per configuration |
 | Hardware interface inventory and operation classes | Implemented | `/api/hardware`; `test_hardware.py` | An inventory, not a validation |
 | Wind, GNSS-denied flight, SLAM, map uncertainty | Missing | | |
-| USB webcam (physical, bench mount) | Unit-tested only | Stand-in device tests; run through the whole backend and dashboard with frames from a file | Not yet run on a real webcam (`scripts/camera_check.py` on the Pi) |
+| USB webcam (physical, bench mount) | Hardware-tested (on the owner's Pi 5) | Ran in flight with Demo 1 passing: 2.7 frames/s, 335 ms per detection | Format and delivered rate not yet recorded; bench only |
 | Physical depth and thermal adapters, Pi camera module | Missing | | |
 | Hardware-in-the-loop | Missing | | Named and refused |
 | Physical flight control | Missing, by design | | Refused at start-up |
 | Requirements, hazards, traceability (Phase 11) | Implemented | 23 requirements, 10 hazards, `scripts/trace.py`; link check runs in CI | Developer-written; no formal hazard analysis, no assurance cases, no independent review |
 | Signed incident packages, device key (Phase 12) | Unit-tested, plus live packaging | `test_identity.py` (edit, re-sign, tamper cases) | Key protected only by file permissions; no trusted time |
-| MAVSDK port firewall | Implemented, partly checked | Rule installed and loopback still works on the development machine; suite ran with it in place | Never checked from a second computer |
+| MAVSDK port firewall | Hardware-tested (owner's Pi) | Reachable from the PC before the rule, timed out after | Lost on reboot unless installed as a service |
 | MAVLink signing | Not possible | PX4 v1.17 has none | |
 | Regression comparison between suite runs (Phase 13) | Unit-tested only | `test_assurance.py` | Only one suite run exists so far, so no real comparison has been made |
 | Customer discovery (Phase 15) | Missing | | No prospective user has been asked anything |

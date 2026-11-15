@@ -46,6 +46,7 @@ class PerceptionPipeline:
         tracker: MultiObjectTracker | None = None,
         record_dir: Path | None = None,
         record_video: bool = True,
+        max_fps: float = 0.0,
     ) -> None:
         """``record_dir``: session directory. Each processed frame appends one line to
         ``detections.jsonl`` and, when ``record_video``, one frame to ``video.mp4``
@@ -57,6 +58,7 @@ class PerceptionPipeline:
         self.selected_track_id: int | None = None
         self._record_dir = record_dir
         self.record_video = record_video
+        self.max_fps = max_fps  # 0: as fast as frames and the detector allow
         # Called from a worker thread with each frame's result and its preview image
         # (None when video may not be saved). Used to keep incident evidence.
         self.frame_listeners: list[Callable[[dict[str, Any], Image | None], None]] = []
@@ -111,12 +113,17 @@ class PerceptionPipeline:
     async def _loop(self) -> None:
         while True:
             try:
+                started = time.monotonic()
                 frame = await self.camera.read_frame()
                 if frame is None:
                     await asyncio.sleep(0.05)
                     continue
                 await self.process(frame)
                 self.last_error = None
+                if self.max_fps > 0:
+                    # Rest until the next slot. The camera keeps only its newest frame, so
+                    # the next one processed is current, not a backlog.
+                    await asyncio.sleep(max(0.0, 1.0 / self.max_fps - (time.monotonic() - started)))
             except asyncio.CancelledError:
                 raise
             except Exception as exc:
@@ -244,6 +251,7 @@ class PerceptionPipeline:
             "selected_track_id": self.selected_track_id,
             "faults": faults,
             "last_error": self.last_error,
+            "max_fps": self.max_fps or None,
             "recording": self._record_dir.name if self._record_dir else None,
             "recording_video": bool(self._record_dir) and self.record_video,
             "camera_mount": getattr(self.camera, "mount", "vehicle"),

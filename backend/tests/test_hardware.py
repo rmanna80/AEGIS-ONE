@@ -101,7 +101,9 @@ def test_every_listed_adapter_exists_and_nothing_claims_hardware_it_lacks() -> N
         module_name, class_name = path.rsplit(".", 1)
         assert hasattr(importlib.import_module(module_name), class_name), path
     hardware_tested = [a["name"] for a in ADAPTERS if a["evidence"] == Evidence.HARDWARE_TESTED]
-    assert hardware_tested == ["Device monitor"]  # the only thing run on physical equipment
+    # The only things run on physical equipment: the Pi's health readings, and a USB webcam
+    # on the Pi during a simulated flight (owner's run, 2026-11-14).
+    assert hardware_tested == ["USB webcam (Video4Linux), bench mount", "Device monitor"]
 
 
 def test_adapters_satisfy_their_interfaces() -> None:

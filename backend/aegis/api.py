@@ -280,9 +280,14 @@ def build_perception(
     )
     if record_dir is not None and not record_video:
         log.info("Camera video is not saved (physical camera); detections are recorded.")
-    return PerceptionPipeline(
-        camera, detector, record_dir=record_dir, record_video=record_video
-    ), ""
+    pipeline = PerceptionPipeline(
+        camera,
+        detector,
+        record_dir=record_dir,
+        record_video=record_video,
+        max_fps=settings.detector_max_fps,
+    )
+    return pipeline, ""
 
 
 def build_hub(settings: Settings, record_dir: Path | None = None) -> TelemetryHub:

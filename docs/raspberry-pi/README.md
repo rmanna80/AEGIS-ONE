@@ -233,6 +233,26 @@ Measure everything together during a flight:
 .venv/bin/python scripts/edge_measure.py --seconds 90 --peer 192.168.1.7 --label "Pi 5, webcam, Demo 1"
 ```
 
+### What the first run showed (2026-11-14)
+
+Demo 1 passed with the webcam and detector running. The detector managed 2.7 frames per
+second (335 ms each) and kept the processor at about 92%; the temperature peaked at
+60.6 °C with no throttling. Two settings change that trade-off:
+
+```bash
+AEGIS_DETECTOR_THREADS=4 bash scripts/run_backend.sh   # faster detection, same CPU
+AEGIS_DETECTOR_MAX_FPS=2 bash scripts/run_backend.sh   # fewer frames, CPU left over
+```
+
+If `edge_measure.py` says your PC did not answer a ping, Windows is blocking it. To allow
+ping from your own network only, in PowerShell as administrator on the PC:
+
+```powershell
+New-NetFirewallRule -DisplayName "AEGIS ping test" -Direction Inbound -Protocol ICMPv4 -IcmpType 8 -RemoteAddress LocalSubnet -Action Allow
+# remove it afterwards:
+Remove-NetFirewallRule -DisplayName "AEGIS ping test"
+```
+
 ## Part 5: Close the MAVSDK control port to the network
 
 The MAVSDK server listens on port 50051 on every network interface, and it cannot be told

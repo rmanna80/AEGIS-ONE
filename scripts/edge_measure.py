@@ -32,6 +32,7 @@ import re
 import shutil
 import statistics
 import subprocess
+import threading
 import time
 import urllib.error
 import urllib.request
@@ -76,6 +77,30 @@ def ping_ms(peer: str) -> float | None:
         return None
     match = re.search(r"time[=<]([0-9.]+) ms", out)
     return float(match.group(1)) if match else None
+
+
+class Pinger(threading.Thread):
+    """Pings the peer once a second on its own thread. A peer that does not answer makes
+    each ping wait up to a second; done inline, that stalled the 10 Hz sampling (found
+    on the first Pi run, which sampled once a second)."""
+
+    def __init__(self, peer: str) -> None:
+        super().__init__(daemon=True, name="ping")
+        self.peer = peer
+        self.results: list[float] = []
+        self.attempts = 0
+        self._stop_event = threading.Event()
+
+    def run(self) -> None:
+        while not self._stop_event.is_set():
+            self.attempts += 1
+            rtt = ping_ms(self.peer)
+            if rtt is not None:
+                self.results.append(rtt)
+            self._stop_event.wait(1.0)
+
+    def stop(self) -> None:
+        self._stop_event.set()
 
 
 def summary(values: list[float], unit: str, digits: int = 1) -> dict[str, Any]:
@@ -123,7 +148,8 @@ def main() -> int:
             "state_age_ms",
             "fresh_state_interval_ms",
             "ping_ms",
-            "camera_fps",
+            "camera_delivered_fps",
+            "processed_fps",
             "inference_ms_p50",
             "inference_ms_p95",
         )
@@ -135,6 +161,7 @@ def main() -> int:
     last_vehicle_time: float | None = None
     last_fresh_at: float | None = None
     perception_on: bool | None = None
+    camera_counts: tuple[int, int] | None = None
     device_seen = False
     errors = 0
 
@@ -142,6 +169,9 @@ def main() -> int:
         f"Measuring for {args.seconds:.0f} s against {args.api} "
         f"(mode {system.get('mode')}, data {system.get('provenance')}) ..."
     )
+    pinger = Pinger(args.peer) if args.peer else None
+    if pinger is not None:
+        pinger.start()
     started = time.monotonic()
     next_slow = started + 1.0
     while time.monotonic() - started < args.seconds:
@@ -192,22 +222,30 @@ def main() -> int:
                 perception_on = bool(perception.get("enabled"))
                 if perception_on:
                     for key, name in (
-                        ("fps", "camera_fps"),
+                        ("fps", "processed_fps"),
                         ("inference_latency_ms_p50", "inference_ms_p50"),
                         ("inference_latency_ms_p95", "inference_ms_p95"),
                     ):
                         if perception.get(key) is not None:
                             series[name].append(float(perception[key]))
+                    camera = perception.get("camera") or {}
+                    if camera.get("delivered_fps") is not None:
+                        series["camera_delivered_fps"].append(float(camera["delivered_fps"]))
+                    if camera.get("frames_delivered"):
+                        dropped = camera["frames_dropped_before_processing"]
+                        delivered = camera["frames_delivered"]
+                        camera_counts = (dropped, delivered)
             except (urllib.error.URLError, OSError, ValueError):
                 errors += 1
-            if args.peer:
-                rtt = ping_ms(args.peer)
-                if rtt is not None:
-                    series["ping_ms"].append(rtt)
         time.sleep(max(0.0, 0.1 - (time.monotonic() - tick)))
 
     duration = time.monotonic() - started
+    if pinger is not None:
+        pinger.stop()
+        series["ping_ms"] = list(pinger.results)
+    sampling_hz = samples / duration if duration else 0.0
     fresh = series["fresh_state_interval_ms"]
+    fresh_reliable = sampling_hz >= 8.0
     results: dict[str, Any] = {
         "cpu_percent_all_cores": summary(series["cpu_percent"], "%")
         if series["cpu_percent"]
@@ -238,7 +276,10 @@ def main() -> int:
             ),
             "updates_per_second": round(len(fresh) / duration, 2) if fresh else None,
             "longest_silence_ms": round(max(fresh), 0) if fresh else None,
-            "note": "Sampled at about 10 Hz, so rates above 10 per second cannot be seen.",
+            "reliable": fresh_reliable,
+            "note": f"Sampled {sampling_hz:.1f} times per second, so faster updates cannot "
+            "be seen."
+            + ("" if fresh_reliable else " TOO SLOW to judge the update rate: ignore it."),
         },
         "network_round_trip_to_peer_ms": summary(series["ping_ms"], "ms", 2)
         if series["ping_ms"]
@@ -247,15 +288,29 @@ def main() -> int:
             if not args.peer
             else "the ping command is not installed"
             if shutil.which("ping") is None
-            else f"{args.peer} did not answer a ping"
+            else f"{args.peer} did not answer a ping (Windows blocks ping by default)"
         ),
-        "camera_frame_rate": summary(series["camera_fps"], "frames/s")
-        if series["camera_fps"]
+        "camera_delivered_fps": summary(series["camera_delivered_fps"], "frames/s")
+        if series["camera_delivered_fps"]
         else unavailable(
-            "perception is off (AEGIS_PERCEPTION=false)"
+            "no camera configured (AEGIS_CAMERA)"
+            if perception_on is False
+            else "this camera does not report it (only USB cameras do)"
+        ),
+        "detector_processed_fps": summary(series["processed_fps"], "frames/s")
+        if series["processed_fps"]
+        else unavailable(
+            "no camera configured (AEGIS_CAMERA)"
             if perception_on is False
             else "no frames were processed"
         ),
+        "camera_frames_not_processed": {
+            "available": camera_counts is not None,
+            "frames": camera_counts[0] if camera_counts else None,
+            "of": camera_counts[1] if camera_counts else None,
+            "note": "Frames the camera delivered that the detector had no time for "
+            "(counted since the backend started).",
+        },
         "inference_latency_ms_p50": summary(series["inference_ms_p50"], "ms")
         if series["inference_ms_p50"]
         else unavailable("perception is off or idle"),
@@ -283,6 +338,8 @@ def main() -> int:
         "data_provenance_seen": sorted(provenances),
         "vehicle_connected_fraction": round(connected_samples / samples, 3) if samples else None,
         "samples": samples,
+        "samples_per_second": round(sampling_hz, 2),
+        "pings_attempted": pinger.attempts if pinger is not None else 0,
         "request_errors": errors,
         "results": results,
     }
@@ -296,13 +353,20 @@ def main() -> int:
         f"{100 * (connected_samples / samples if samples else 0):.0f}% of the time, "
         f"data: {', '.join(sorted(provenances)) or 'none'}"
     )
+    print(f"  sampled {sampling_hz:.1f} times per second")
     for name, value in results.items():
         if isinstance(value, list):
             print(f"  {name:36s} {', '.join(value) or 'none'}")
+        elif name == "camera_frames_not_processed":
+            if value["available"]:
+                share = 100 * value["frames"] / max(1, value["of"])
+                print(f"  {name:36s} {value['frames']} of {value['of']} ({share:.0f}%)")
         elif value.get("available"):
             extra = ""
             if "updates_per_second" in value:
                 extra = f"  ({value['updates_per_second']} per second)"
+                if not value["reliable"]:
+                    extra += "  UNRELIABLE: sampling too slow"
             print(
                 f"  {name:36s} median {value['median']}  p95 {value['p95']}  "
                 f"max {value['max']} {value['unit']}{extra}"

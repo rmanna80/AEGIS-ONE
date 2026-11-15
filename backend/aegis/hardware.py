@@ -118,12 +118,13 @@ ADAPTERS: list[dict[str, Any]] = [
         "implementation": "aegis.perception.usb_camera.UsbCameraAdapter",
         "interface": "CameraSource",
         "provenance": [Provenance.PHYSICAL.value],
-        "evidence": Evidence.UNIT_TESTED.value,
-        "notes": "Logic tested against a stand-in device, and run through the whole backend "
-        "and dashboard with frames from a video file. Not yet run on a real webcam: "
-        "scripts/camera_check.py is the check. A bench camera only: not on any vehicle, "
-        "its detections are never placed in the world. Video is not saved unless "
-        "AEGIS_RECORD_CAMERA_VIDEO=always.",
+        "evidence": Evidence.HARDWARE_TESTED.value,
+        "notes": "Ran on the owner's Raspberry Pi 5 with a USB webcam during a simulated "
+        "flight (2026-11-14, Demo 1 passed): 2.7 frames/s through the detector, 335 ms "
+        "median detection with the default 2 threads. The format the camera agreed to and "
+        "its delivered rate were not yet recorded (scripts/camera_check.py). A bench "
+        "camera only: not on any vehicle, its detections are never placed in the world. "
+        "Video is not saved unless AEGIS_RECORD_CAMERA_VIDEO=always.",
     },
     {
         "kind": "RGB camera",

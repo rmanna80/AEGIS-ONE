@@ -63,6 +63,9 @@ class Settings(BaseSettings):
     # CPU threads for inference. 0 = half the cores, at most 4, so the detector
     # does not starve the simulator (a starved simulator runs below real time).
     detector_threads: int = 0
+    # At most this many frames per second through the detector (0 = as fast as it can).
+    # On a companion computer the detector otherwise takes every core it can get.
+    detector_max_fps: float = Field(default=0.0, ge=0.0, le=60.0)
 
     # Navigation / mapping (optional). depth: "none", "raycast" (software depth
     # sensor against the scenario's geometry; works on any simulator) or "stream"

@@ -1,6 +1,6 @@
 # Traceability
 
-Generated 2026-11-15T00:45:38Z at commit aa95493 (with uncommitted changes) by `python scripts/trace.py`. Unit tests from that run; scenario results are the runs made with each scenario's newest software commit.
+Generated 2026-11-15T02:22:32Z at commit bf6854c (with uncommitted changes) by `python scripts/trace.py`. Unit tests from that run; scenario results are the runs made with each scenario's newest software commit.
 
 Requirements: 11 verified in simulation, 12 verified by unit tests. No overall score is given.
 
@@ -40,7 +40,7 @@ Requirements: 11 verified in simulation, 12 verified by unit tests. No overall s
 | H-2 | Simulated or replayed data is taken for a real aircraft, or the reverse. | R-PROV-1 (verified by unit tests), R-PROV-2 (verified by unit tests), R-PROV-3 (verified by unit tests) | no | The physical path has only been unit-tested; no physical autopilot has been connected. |
 | H-3 | Software meant for simulation commands a physical aircraft. | R-SAFE-1 (verified by unit tests), R-SAFE-2 (verified by unit tests), R-SAFE-3 (verified by unit tests) | no | The simulator check relies on parameters only PX4's simulator build reports; a modified firmware could imitate them. |
 | H-4 | AI or monitor output moves the vehicle without an operator decision. | R-SAFE-4 (verified in simulation) | no | The navigation auto-hold (AEGIS_NAV_AUTO_HOLD) does command Hold by design; it is documented and can be turned off. |
-| H-5 | Someone other than the operator commands the vehicle. | R-SEC-1 (verified by unit tests) | yes | OPEN: the MAVSDK control port listens on every interface and cannot be restricted by the software. scripts/lock_mavsdk_port.sh blocks it but has not been checked from another computer. PX4 v1.17 has no MAVLink signing. |
+| H-5 | Someone other than the operator commands the vehicle. | R-SEC-1 (verified by unit tests) | yes | OPEN: the MAVSDK control port listens on every interface and cannot be restricted by the software. scripts/lock_mavsdk_port.sh blocks it: checked from a second computer on the owner's network (2026-11-14: reachable before the rule, timed out after). The rule is lost on reboot unless deploy/aegis-firewall.service is installed. MAVLink itself is unsigned (PX4 v1.17 has no signing), so anything on the network can still send MAVLink to the autopilot's own ports. |
 | H-6 | An incident is investigated from evidence that was altered, incomplete or misdescribed. | R-EVID-1 (verified in simulation), R-EVID-2 (verified by unit tests), R-EVID-3 (verified in simulation), R-SEC-2 (verified by unit tests), R-SEC-3 (verified by unit tests) | no | Anyone holding the device key, or write access to the whole session including the audit log, can forge consistently. No external timestamp or anchor. |
 | H-7 | The position shown is wrong. | R-GNSS-1 (verified in simulation), R-NAV-1 (verified by unit tests) | no | Only AEGIS's copy is faulted in tests; PX4's estimator is never given bad GNSS. Spoofing that is consistent with the reported velocity is not detected. |
 | H-8 | False alarms teach operators to ignore alerts. | R-FA-1 (verified in simulation) | no | Measured on one simulator only. Real sensor noise is not represented. |

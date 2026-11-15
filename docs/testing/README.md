@@ -454,6 +454,24 @@ showed a different key from the one signing packages.
 Not tested: a real webcam (on the Pi or anywhere); the firewall from a second computer;
 comparison of two suite runs (only one exists); any of this on the Pi.
 
+## Raspberry Pi 5 with a USB webcam (owner's run, 2026-11-14)
+
+Simulator on the PC, backend on the Pi with `AEGIS_CAMERA=usb`.
+
+| What | Result |
+| --- | --- |
+| Demo 1 | 5 of 5, 144 s |
+| CPU, 4 cores | 92% median, 98% p95 |
+| Temperature | 60.6 °C max, no throttling |
+| Detector on live webcam frames | 2.7 frames/s; 335 ms median per frame (2 threads) |
+| Backend loop lag | 9 ms max |
+| Vehicle data age | 57 ms median |
+| MAVSDK port from the PC | open before the firewall rule, timed out after |
+
+The "updates per second" from that run (1.05) is an artifact of the measurement script,
+whose ping to an unanswering PC stalled its sampling to once a second. Fixed; checked here
+with a stand-in ping that never answers (10 samples per second, 9.95 updates per second).
+
 ## Not tested yet
 
 - Anomaly detection during Gazebo flights on the owner's machine (only replayed from one

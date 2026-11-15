@@ -72,7 +72,7 @@
       "mitigated_by": [
         "R-SEC-1"
       ],
-      "residual": "OPEN: the MAVSDK control port listens on every interface and cannot be restricted by the software. scripts/lock_mavsdk_port.sh blocks it but has not been checked from another computer. PX4 v1.17 has no MAVLink signing."
+      "residual": "OPEN: the MAVSDK control port listens on every interface and cannot be restricted by the software. scripts/lock_mavsdk_port.sh blocks it: checked from a second computer on the owner's network (2026-11-14: reachable before the rule, timed out after). The rule is lost on reboot unless deploy/aegis-firewall.service is installed. MAVLink itself is unsigned (PX4 v1.17 has no signing), so anything on the network can still send MAVLink to the autopilot's own ports."
     },
     {
       "id": "H-6",
