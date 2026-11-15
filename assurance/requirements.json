@@ -1,0 +1,449 @@
+{
+  "schema": "aegis.requirements/1",
+  "note": "Written by the developers from the project brief and the code. Not derived from a formal hazard analysis (no FMEA or STPA has been done). A requirement verified here is verified in simulation unless its evidence says otherwise.",
+  "requirements": [
+    {
+      "id": "R-SAFE-1",
+      "safety_critical": true,
+      "statement": "AEGIS sends no command to an autopilot that has not proved it is a simulator.",
+      "verified_by": [
+        {
+          "kind": "unit_test",
+          "ref": "backend/tests/test_px4_attestation.py::test_unknown_airframe_is_refused"
+        },
+        {
+          "kind": "unit_test",
+          "ref": "backend/tests/test_px4_attestation.py::test_real_hardware_sharing_a_simulation_airframe_number_is_refused"
+        },
+        {
+          "kind": "unit_test",
+          "ref": "backend/tests/test_px4_attestation.py::test_recheck_revokes_when_the_vehicle_is_no_longer_a_simulator"
+        },
+        {
+          "kind": "unit_test",
+          "ref": "backend/tests/test_hardware.py::test_physical_autopilot_cannot_be_commanded_in_any_mode"
+        }
+      ]
+    },
+    {
+      "id": "R-SAFE-2",
+      "safety_critical": true,
+      "statement": "Physical flight control cannot be enabled by configuration.",
+      "verified_by": [
+        {
+          "kind": "unit_test",
+          "ref": "backend/tests/test_api.py::test_physical_mode_cannot_be_configured"
+        },
+        {
+          "kind": "unit_test",
+          "ref": "backend/tests/test_hardware.py::test_operation_classes"
+        }
+      ]
+    },
+    {
+      "id": "R-SAFE-3",
+      "safety_critical": true,
+      "statement": "Monitor and replay modes have no command path, whatever token is supplied.",
+      "verified_by": [
+        {
+          "kind": "unit_test",
+          "ref": "backend/tests/test_api.py::test_monitor_mode_refuses_commands_even_with_token"
+        },
+        {
+          "kind": "unit_test",
+          "ref": "backend/tests/test_recording.py::test_replay_is_read_only"
+        }
+      ]
+    },
+    {
+      "id": "R-SAFE-4",
+      "safety_critical": true,
+      "statement": "Detection, tracking and the monitors never command the vehicle; their output is advisory or display-only.",
+      "verified_by": [
+        {
+          "kind": "unit_test",
+          "ref": "backend/tests/test_security.py::test_alerts_latch_then_clear_and_the_monitor_cannot_command"
+        },
+        {
+          "kind": "unit_test",
+          "ref": "backend/tests/test_cameras_pipeline.py::test_operator_selection_is_validated_and_cleared_when_track_ends"
+        },
+        {
+          "kind": "scenario",
+          "ref": "link-loss-detection",
+          "criterion": "C4"
+        },
+        {
+          "kind": "scenario",
+          "ref": "stale-telemetry-detection",
+          "criterion": "C4"
+        },
+        {
+          "kind": "scenario",
+          "ref": "gnss-loss-detection",
+          "criterion": "C4"
+        },
+        {
+          "kind": "scenario",
+          "ref": "telemetry-delay-detection",
+          "criterion": "C4"
+        }
+      ]
+    },
+    {
+      "id": "R-PROV-1",
+      "safety_critical": true,
+      "statement": "Vehicle data is labelled simulated only after the autopilot proves it is a simulator, physical when it answers without that proof, and unknown before either.",
+      "verified_by": [
+        {
+          "kind": "unit_test",
+          "ref": "backend/tests/test_hardware.py::test_provenance_follows_the_evidence_never_an_assumption"
+        }
+      ]
+    },
+    {
+      "id": "R-PROV-2",
+      "safety_critical": true,
+      "statement": "Replayed data is labelled replayed and keeps the provenance it was recorded with.",
+      "verified_by": [
+        {
+          "kind": "unit_test",
+          "ref": "backend/tests/test_recording.py::test_replay_relabels_provenance_and_advances"
+        },
+        {
+          "kind": "unit_test",
+          "ref": "backend/tests/test_replay.py::test_replay_reports_each_state_as_it_was_labelled_when_recorded"
+        },
+        {
+          "kind": "unit_test",
+          "ref": "backend/tests/test_hardware.py::test_replay_reports_each_states_own_recorded_provenance"
+        }
+      ]
+    },
+    {
+      "id": "R-PROV-3",
+      "safety_critical": false,
+      "statement": "Physical camera frames are labelled physical and as a bench camera, and are not saved as video unless the operator turns it on.",
+      "verified_by": [
+        {
+          "kind": "unit_test",
+          "ref": "backend/tests/test_usb_camera.py::test_frames_are_physical_bench_frames_and_the_negotiation_is_reported"
+        },
+        {
+          "kind": "unit_test",
+          "ref": "backend/tests/test_usb_camera.py::test_physical_video_is_not_saved_but_detections_are_and_replay_shows_boxes"
+        },
+        {
+          "kind": "unit_test",
+          "ref": "backend/tests/test_usb_camera.py::test_record_video_default_depends_on_the_camera"
+        }
+      ]
+    },
+    {
+      "id": "R-LINK-1",
+      "safety_critical": true,
+      "statement": "Loss of the vehicle link is alerted within 3 s and the alert clears within 5 s of the link returning.",
+      "verified_by": [
+        {
+          "kind": "scenario",
+          "ref": "link-loss-detection",
+          "criterion": "C2"
+        },
+        {
+          "kind": "scenario",
+          "ref": "link-loss-detection",
+          "criterion": "C3"
+        }
+      ]
+    },
+    {
+      "id": "R-STALE-1",
+      "safety_critical": true,
+      "statement": "Vehicle data older than 2 s is flagged within 0.5 s of crossing that age, and a stall is reported as stale data, not as frozen data.",
+      "verified_by": [
+        {
+          "kind": "scenario",
+          "ref": "telemetry-delay-detection",
+          "criterion": "C2"
+        },
+        {
+          "kind": "unit_test",
+          "ref": "backend/tests/test_security.py::test_no_new_data_is_a_stall_not_frozen_telemetry"
+        }
+      ]
+    },
+    {
+      "id": "R-FROZEN-1",
+      "safety_critical": true,
+      "statement": "Vehicle data that keeps arriving but stops changing in flight is flagged within 4 s.",
+      "verified_by": [
+        {
+          "kind": "scenario",
+          "ref": "stale-telemetry-detection",
+          "criterion": "C2"
+        },
+        {
+          "kind": "unit_test",
+          "ref": "backend/tests/test_security.py::test_clock_reversal_and_frozen_telemetry"
+        }
+      ]
+    },
+    {
+      "id": "R-GNSS-1",
+      "safety_critical": true,
+      "statement": "Loss of GNSS fix is alerted within 1 s.",
+      "verified_by": [
+        {
+          "kind": "scenario",
+          "ref": "gnss-loss-detection",
+          "criterion": "C2"
+        }
+      ]
+    },
+    {
+      "id": "R-NAV-1",
+      "safety_critical": true,
+      "statement": "A position jump inconsistent with the reported velocity is flagged within 1.2 s; slow drift is flagged as drift.",
+      "verified_by": [
+        {
+          "kind": "unit_test",
+          "ref": "backend/tests/test_security.py::test_position_jump_is_caught_within_a_second"
+        },
+        {
+          "kind": "unit_test",
+          "ref": "backend/tests/test_security.py::test_slow_drift_is_caught_as_drift_not_as_a_jump"
+        }
+      ]
+    },
+    {
+      "id": "R-CRASH-1",
+      "safety_critical": true,
+      "statement": "When AEGIS's MAVLink bridge crashes, the operator is told within 3 s that data stopped, the bridge is restarted, and operator commands work again afterwards.",
+      "verified_by": [
+        {
+          "kind": "scenario",
+          "ref": "bridge-crash-recovery",
+          "criterion": "C2"
+        },
+        {
+          "kind": "scenario",
+          "ref": "bridge-crash-recovery",
+          "criterion": "C3"
+        },
+        {
+          "kind": "scenario",
+          "ref": "bridge-crash-recovery",
+          "criterion": "C4"
+        },
+        {
+          "kind": "scenario",
+          "ref": "bridge-crash-recovery",
+          "criterion": "C7"
+        }
+      ]
+    },
+    {
+      "id": "R-HONEST-1",
+      "safety_critical": false,
+      "statement": "When AEGIS loses track of a mission it says so instead of showing stale progress.",
+      "verified_by": [
+        {
+          "kind": "scenario",
+          "ref": "bridge-crash-recovery",
+          "criterion": "C6"
+        }
+      ]
+    },
+    {
+      "id": "R-EVID-1",
+      "safety_critical": false,
+      "statement": "A critical alert preserves the surrounding record as an incident package with a hash manifest anchored in the audit log.",
+      "verified_by": [
+        {
+          "kind": "unit_test",
+          "ref": "backend/tests/test_replay.py::test_a_critical_alert_opens_an_incident_and_clearing_packages_it"
+        },
+        {
+          "kind": "scenario",
+          "ref": "link-loss-detection",
+          "criterion": "C5"
+        },
+        {
+          "kind": "scenario",
+          "ref": "link-loss-detection",
+          "criterion": "C6"
+        },
+        {
+          "kind": "scenario",
+          "ref": "bridge-crash-recovery",
+          "criterion": "C8"
+        },
+        {
+          "kind": "scenario",
+          "ref": "bridge-crash-recovery",
+          "criterion": "C9"
+        }
+      ]
+    },
+    {
+      "id": "R-EVID-2",
+      "safety_critical": false,
+      "statement": "A package that is altered after packaging is detected, including a rewritten manifest or a re-signed one, when checked against the device's key.",
+      "verified_by": [
+        {
+          "kind": "unit_test",
+          "ref": "backend/tests/test_replay.py::test_a_rewritten_manifest_is_caught_only_with_the_recorded_hash"
+        },
+        {
+          "kind": "unit_test",
+          "ref": "backend/tests/test_identity.py::test_editing_the_manifest_breaks_the_signature"
+        },
+        {
+          "kind": "unit_test",
+          "ref": "backend/tests/test_identity.py::test_re_signing_with_another_key_is_caught_only_against_the_trusted_key"
+        }
+      ]
+    },
+    {
+      "id": "R-EVID-3",
+      "safety_critical": false,
+      "statement": "An incident package holds at least 95% of the state records expected for its duration, including while the link is down.",
+      "verified_by": [
+        {
+          "kind": "scenario",
+          "ref": "link-loss-detection",
+          "criterion": "C7"
+        },
+        {
+          "kind": "scenario",
+          "ref": "bridge-crash-recovery",
+          "criterion": "C10"
+        }
+      ]
+    },
+    {
+      "id": "R-FA-1",
+      "safety_critical": false,
+      "statement": "Normal flight raises no monitored alert, and an injected fault raises no alert other than the ones it should.",
+      "verified_by": [
+        {
+          "kind": "unit_test",
+          "ref": "backend/tests/test_security.py::test_recorded_real_flight_raises_no_navigation_or_telemetry_anomaly"
+        },
+        {
+          "kind": "unit_test",
+          "ref": "backend/tests/test_security.py::test_battery_recharged_between_flights_is_not_a_rise_in_flight"
+        },
+        {
+          "kind": "scenario",
+          "ref": "link-loss-detection",
+          "criterion": "C1"
+        },
+        {
+          "kind": "scenario",
+          "ref": "link-loss-detection",
+          "criterion": "C8"
+        },
+        {
+          "kind": "scenario",
+          "ref": "gnss-loss-detection",
+          "criterion": "C9"
+        },
+        {
+          "kind": "scenario",
+          "ref": "telemetry-delay-detection",
+          "criterion": "C9"
+        },
+        {
+          "kind": "scenario",
+          "ref": "bridge-crash-recovery",
+          "criterion": "C11"
+        }
+      ]
+    },
+    {
+      "id": "R-SEC-1",
+      "safety_critical": true,
+      "statement": "Every command needs the operator token; every attempt is audited without recording the token.",
+      "verified_by": [
+        {
+          "kind": "unit_test",
+          "ref": "backend/tests/test_api.py::test_commands_require_operator_token"
+        },
+        {
+          "kind": "unit_test",
+          "ref": "backend/tests/test_security.py::test_commands_and_failures_are_audited_without_the_token"
+        }
+      ]
+    },
+    {
+      "id": "R-SEC-2",
+      "safety_critical": false,
+      "statement": "The audit log shows any edit, deletion or reordering of its records.",
+      "verified_by": [
+        {
+          "kind": "unit_test",
+          "ref": "backend/tests/test_security.py::test_audit_log_chain_detects_edits_deletions_and_reordering"
+        }
+      ]
+    },
+    {
+      "id": "R-SEC-3",
+      "safety_critical": false,
+      "statement": "The device signing key is created readable by its owner only and a key others can read is refused.",
+      "verified_by": [
+        {
+          "kind": "unit_test",
+          "ref": "backend/tests/test_identity.py::test_the_key_is_created_owner_only_and_reused"
+        },
+        {
+          "kind": "unit_test",
+          "ref": "backend/tests/test_identity.py::test_a_key_others_can_read_is_refused"
+        }
+      ]
+    },
+    {
+      "id": "R-FAULT-1",
+      "safety_critical": true,
+      "statement": "Fault injection works only when explicitly enabled and only against a proven simulator, and every altered snapshot is labelled.",
+      "verified_by": [
+        {
+          "kind": "unit_test",
+          "ref": "backend/tests/test_security.py::test_fault_injection_is_off_by_default_and_needs_an_attested_simulator"
+        },
+        {
+          "kind": "unit_test",
+          "ref": "backend/tests/test_security.py::test_injected_faults_alter_the_copy_label_it_and_expire"
+        },
+        {
+          "kind": "unit_test",
+          "ref": "backend/tests/test_security.py::test_a_bridge_crash_is_carried_out_only_by_an_attested_simulator_adapter"
+        },
+        {
+          "kind": "scenario",
+          "ref": "stale-telemetry-detection",
+          "criterion": "C3"
+        }
+      ]
+    },
+    {
+      "id": "R-GEO-1",
+      "safety_critical": true,
+      "statement": "A mission with a waypoint or a leg outside the geofence is rejected before anything is sent to the autopilot.",
+      "verified_by": [
+        {
+          "kind": "unit_test",
+          "ref": "backend/tests/test_missions.py::test_waypoint_outside_geofence_is_reported"
+        },
+        {
+          "kind": "unit_test",
+          "ref": "backend/tests/test_missions.py::test_leg_leaving_concave_fence_is_reported"
+        },
+        {
+          "kind": "unit_test",
+          "ref": "backend/tests/test_api.py::test_invalid_mission_is_rejected_with_reasons"
+        }
+      ]
+    }
+  ]
+}

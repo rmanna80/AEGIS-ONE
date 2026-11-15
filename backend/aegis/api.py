@@ -46,6 +46,7 @@ from aegis.fleet import Fleet, route_conflicts, route_legs
 from aegis.hardware import inventory as hardware_inventory
 from aegis.hardware import operation_class
 from aegis.hub import TelemetryHub
+from aegis.identity import DeviceKey
 from aegis.interfaces import MissionExecutor, VehicleTelemetrySource
 from aegis.missions import (
     Mission,
@@ -353,10 +354,18 @@ def create_app(
     hub.extra_checks.append(security.findings)
     device = DeviceMonitor(settings.data_dir)
     hub.extra_checks.append(device.findings)
+    signer: DeviceKey | None = None
+    if record_dir is not None:
+        try:
+            signer = DeviceKey.load_or_create(settings.device_key)
+        except (OSError, ValueError) as exc:
+            log.warning("Incident packages will not be signed: %s", exc)
     session = session_manifest(
         settings, device.snapshot, record_dir.name if record_dir is not None else "unrecorded"
     )
+    session["signing_key"] = signer.describe() if signer is not None else {"available": False}
     incidents = IncidentManager(hub, record_dir, audit, session)
+    incidents.signer = signer
     anomaly = AnomalyMonitor(hub) if settings.anomaly else None
     if anomaly is not None:
         hub.extra_checks.append(anomaly.findings)
@@ -768,6 +777,7 @@ def create_app(
                 fault_injection=injector is not None,
                 mode=settings.mode.value,
                 host=settings.host,
+                signing=signer.fingerprint if signer is not None else None,
             ),
             "device": device.snapshot,
             "auth_failures_recent": security.recent_failures(),

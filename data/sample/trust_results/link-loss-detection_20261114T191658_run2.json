@@ -1,0 +1,158 @@
+{
+  "schema": "aegis.trust-result/1",
+  "scenario_id": "link-loss-detection",
+  "scenario_sha256": "5a9c825a7490f743556741c676681587403610e7bd9e385abd0f75683565bdf8",
+  "title": "Loss of the vehicle link is detected, reported and recorded",
+  "purpose": "The operator must be told within seconds when vehicle data stops arriving, and the surrounding record must be preserved for investigation. Requirement R-LINK-1.",
+  "status": "PASS",
+  "status_reason": "every criterion passed",
+  "started_utc_s": 1794701724.608,
+  "duration_s": 93.7,
+  "environment": {
+    "simulator": "px4_sitl",
+    "scenario_id": "open_field",
+    "provenance": "simulated",
+    "needs_fault_injection": true,
+    "devices": [
+      "backend host",
+      "PX4 SITL"
+    ],
+    "vehicle_source": "px4_sitl:sih_quadx",
+    "operation_class": "simulation"
+  },
+  "simulated_or_physical": "simulated",
+  "software": {
+    "aegis_version": "0.1.0",
+    "git_commit": "aa9549381bed0ba8f2600d1bd7a5379f2499631d",
+    "git_uncommitted_changes": false,
+    "python": "3.12.3",
+    "platform": "Linux-6.18.44-fc-v470-x86_64-with-glibc2.39"
+  },
+  "device": {
+    "model": null,
+    "machine": "x86_64",
+    "cpu_count": 2,
+    "hostname_sha256": "5bce98f73f3ed0c8"
+  },
+  "expected_behaviour": "A critical link.lost alert appears within 3 s and clears within 5 s of the link returning. An incident package is produced and verifies. The vehicle is not commanded by the monitors and continues its mission.",
+  "criteria": [
+    {
+      "id": "C1",
+      "description": "No link or anomaly alert before the fault",
+      "status": "PASS",
+      "expected": "no alert starting with ['nav.', 'telemetry.', 'battery.implausible', 'control.', 'security.', 'link.', 'gps.'] before the fault",
+      "observed": "alerts before the fault: none",
+      "safety_critical": false
+    },
+    {
+      "id": "C2",
+      "description": "Link loss is alerted quickly",
+      "status": "PASS",
+      "expected": "alert link.lost within 3 s of the fault",
+      "observed": "raised after 0.20 s",
+      "safety_critical": true
+    },
+    {
+      "id": "C3",
+      "description": "The alert clears when the link returns",
+      "status": "PASS",
+      "expected": "alert link.lost clears within 5 s of the fault ending",
+      "observed": "cleared 0.05 s after the fault ended",
+      "safety_critical": false
+    },
+    {
+      "id": "C4",
+      "description": "The mission is not interrupted by the monitors",
+      "status": "PASS",
+      "expected": "mission phase is one of ['active', 'returning', 'completed']",
+      "observed": "phase 'active'",
+      "safety_critical": false
+    },
+    {
+      "id": "C5",
+      "description": "The incident is preserved",
+      "status": "PASS",
+      "expected": "an incident package is produced",
+      "observed": "packaged",
+      "safety_critical": false
+    },
+    {
+      "id": "C6",
+      "description": "The preserved evidence verifies",
+      "status": "PASS",
+      "expected": "the incident package verifies against its manifest",
+      "observed": "manifest verified",
+      "safety_critical": false
+    },
+    {
+      "id": "C7",
+      "description": "The record of what AEGIS saw during the event is complete",
+      "status": "PASS",
+      "expected": "incident_completeness_at_least",
+      "observed": "100% of the expected state records; 0 s with none",
+      "safety_critical": false
+    },
+    {
+      "id": "C8",
+      "description": "The fault causes no other monitored alert (no false alarms)",
+      "status": "PASS",
+      "expected": "no monitored alert other than the ones this fault should cause",
+      "observed": "other alerts: none",
+      "safety_critical": false
+    },
+    {
+      "id": "C9",
+      "description": "After the test the operator's Return works; the vehicle lands",
+      "status": "PASS",
+      "expected": "after the test, the operator's Return is accepted and the vehicle lands and disarms",
+      "observed": "landed and disarmed",
+      "safety_critical": false
+    }
+  ],
+  "measurements": {
+    "alerts_before_fault": [],
+    "alert_raised_after_s": {
+      "link.lost": 0.2
+    },
+    "alert_cleared_after_fault_end_s": {
+      "link.lost": 0.05
+    },
+    "snapshot_labelled_during_fault": true,
+    "alerts_during_fault": [
+      "link.lost"
+    ],
+    "flight_modes_during_fault": [
+      "MISSION"
+    ],
+    "mission_phase_after_fault": "active",
+    "bridge_restarts_during_fault": 0,
+    "incident_state_record_fraction": 1.0,
+    "incident_seconds_without_records": 0,
+    "incident_seconds_without_link": 6.0,
+    "incident_packaged": true,
+    "incident_verifies": true,
+    "landed_after_test": true
+  },
+  "evidence": {
+    "session_id": "20261114T191331",
+    "incident_id": "INC-20261114T191544-02",
+    "incident_folder": "/home/claude/aegis-one/data/generated/sessions/20261114T191331/incidents/INC-20261114T191544-02",
+    "incident_manifest_sha256": "60451114fcf931d99501f3c3a4ffe7e59065d7e6706837812ca24d7a6bacaa85",
+    "incident_completeness": {
+      "state_records": 290,
+      "state_records_expected_at_full_rate": 290,
+      "fraction_of_expected": 1.0,
+      "gaps_in_state_records": [],
+      "seconds_without_state_records": 0,
+      "state_records_without_link": 60,
+      "seconds_without_link": 6.0,
+      "note": "A record without a link holds the last values AEGIS had, marked connected=false; it is not a measurement of the vehicle."
+    }
+  },
+  "limitations": [
+    "The link is reported as down inside AEGIS; MAVLink between PX4 and AEGIS is not actually interrupted.",
+    "Built-in PX4 simulator only; no network between the vehicle and the backend.",
+    "The fault is injected into AEGIS's copy of the telemetry; the vehicle itself keeps receiving correct data.",
+    "One run under one set of conditions. It does not show behaviour under other conditions, and it is not a safety certification."
+  ]
+}

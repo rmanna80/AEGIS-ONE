@@ -442,6 +442,7 @@ export interface IncidentSummary {
   seconds?: number;
   files?: number;
   manifest_sha256?: string;
+  signed_by?: string | null;
   folder?: string;
   error?: string;
 }

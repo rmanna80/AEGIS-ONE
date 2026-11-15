@@ -22,10 +22,12 @@ from typing import TYPE_CHECKING, Any
 
 from aegis.contracts import Severity
 from aegis.hub import TelemetryHub
+from aegis.identity import verify_signature
 from aegis.replay.evidence import MANIFEST_NAME, verify_manifest, write_manifest
 from aegis.security import AuditLog
 
 if TYPE_CHECKING:
+    from aegis.identity import DeviceKey
     from aegis.replay.camera_evidence import CameraEvidence
 
 log = logging.getLogger(__name__)
@@ -161,6 +163,7 @@ class IncidentManager:
         self._task: asyncio.Task[None] | None = None
         self._packaging: set[asyncio.Task[None]] = set()
         self.camera: CameraEvidence | None = None  # set when a camera is running
+        self.signer: DeviceKey | None = None  # set when this device has a signing key
 
     # ------------------------------------------------------------------ lifecycle
 
@@ -373,6 +376,9 @@ class IncidentManager:
             }
             (folder / "incident.json").write_text(json.dumps(document, indent=2))
             manifest = write_manifest(folder, f"AEGIS incident {incident['incident_id']}")
+            signed_by = None
+            if self.signer is not None:
+                signed_by = self.signer.sign_manifest(folder)["fingerprint"]
             incident.update(
                 status="packaged",
                 folder=str(folder),
@@ -381,10 +387,12 @@ class IncidentManager:
                 state_records=summary["state_records"],
                 seconds=round(duration, 2),
             )
+            incident["signed_by"] = signed_by
             self.audit.append(
                 "incident_packaged",
                 incident_id=incident["incident_id"],
                 manifest_sha256=manifest["manifest_sha256"],
+                signed_by=signed_by,
             )
             log.warning(
                 "Incident %s packaged (%d files, manifest %s)",
@@ -406,9 +414,11 @@ class IncidentManager:
         if incident is None or incident.get("status") != "packaged":
             return None
         folder = Path(incident["folder"])
+        trusted = self.signer.fingerprint if self.signer is not None else None
         return {
             "incident": json.loads((folder / "incident.json").read_text()),
             "verification": verify_manifest(folder, incident["manifest_sha256"]),
+            "signature": verify_signature(folder, trusted),
         }
 
     def export_zip(self, incident_id: str) -> bytes | None:
@@ -438,4 +448,8 @@ def import_package(archive: Path, destination: Path) -> dict[str, Any]:
     folder = destination / roots.pop()
     if not (folder / MANIFEST_NAME).is_file():
         raise ValueError("Not an AEGIS incident export (no manifest).")
-    return {"folder": str(folder), "verification": verify_manifest(folder)}
+    return {
+        "folder": str(folder),
+        "verification": verify_manifest(folder),
+        "signature": verify_signature(folder),
+    }

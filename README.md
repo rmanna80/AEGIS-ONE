@@ -130,6 +130,18 @@ on the right. Clicking an object highlights its track; it never changes what the
 Dashed boxes marked "predicted" are tracks coasting through a missed detection or occlusion.
 Measure the detector on your machine with `python scripts/eval_detector.py`.
 
+With a real USB webcam (on the Raspberry Pi or any Linux machine):
+
+```bash
+python scripts/camera_check.py            # find it, measure it, time the detector on it
+AEGIS_CAMERA=usb bash scripts/run_backend.sh
+```
+
+A USB camera is labelled **physical** and shown as a **bench camera**: it is not on the
+vehicle, its detections are never placed in the world, and its video is not saved unless
+`AEGIS_RECORD_CAMERA_VIDEO=always` (labels and boxes are). Setup on the Pi:
+[docs/raspberry-pi/README.md](docs/raspberry-pi/README.md), Part 4.
+
 ## Demo 2: AI detection (urban scenario)
 
 A street with three standing people and three parked vehicles; the drone makes a slow pass at
@@ -284,8 +296,10 @@ python scripts/incident_tool.py verify data/sample/incident_link_loss
 AEGIS_MODE=replay AEGIS_REPLAY_FILE=data/sample/incident_link_loss/events.jsonl bash scripts/run_backend.sh
 ```
 
-Playback shows what was recorded; it is not a re-run of the software. Verification shows
-the files are unchanged, not that the measurements were right. Details and limits:
+Packages are signed with this computer's own key (`python scripts/device_key.py` shows its
+fingerprint). Playback shows what was recorded; it is not a re-run of the software.
+Verification shows the files are unchanged and which device signed them, not that the
+measurements were right. Details and limits:
 [docs/replay/README.md](docs/replay/README.md).
 
 ## Scenario tests (AEGIS TRUST)
@@ -294,14 +308,27 @@ the files are unchanged, not that the measurements were right. Details and limit
 bash scripts/run_px4.sh sih                                      # terminal 1
 AEGIS_FAULT_INJECTION=true bash scripts/run_backend.sh           # terminal 2
 python scripts/trust_run.py --token <token> trust/scenarios/link_loss_detection.json
-python scripts/trust_run.py --token <token> trust/scenarios/stale_telemetry_detection.json
+python scripts/trust_suite.py --token <token> trust/suites/core.json   # all five, 3 runs each
 ```
 
-Each flies the demo mission, injects one fault into AEGIS's copy of the telemetry, and
-gives every criterion PASS, FAIL or INCONCLUSIVE with the measurement. One failed criterion
-fails the scenario; there is no overall score. These are tests written and run by the
-developers on a simulator, not a safety certification:
-[docs/trust/README.md](docs/trust/README.md).
+Five scenarios: link loss, frozen data, GNSS loss, delayed data, and a crash of AEGIS's own
+MAVLink bridge process. Each flies the demo mission, injects one fault, and gives every
+criterion PASS, FAIL or INCONCLUSIVE with the measurement. One failed criterion fails the
+scenario; a suite reports how many runs each criterion passed and the spread of each
+timing; there is no overall score. These are tests written and run by the developers on a
+simulator, not a safety certification: [docs/trust/README.md](docs/trust/README.md).
+
+## Requirements and traceability
+
+`assurance/requirements.json` lists what AEGIS must do and the checks that verify each
+requirement; `assurance/hazards.json` what could go wrong and what is left over.
+
+```bash
+python scripts/trace.py --write-docs      # status of every requirement from the latest results
+```
+
+Snapshot: [docs/assurance/TRACEABILITY.md](docs/assurance/TRACEABILITY.md). How it works and
+what it does not claim: [docs/assurance/README.md](docs/assurance/README.md).
 
 ## Demo 1: Autonomous survey
 
@@ -359,9 +386,12 @@ backend/aegis/          Python package
   sar/ fleet.py         thermal search, multi-vehicle coordination
   anomaly.py security.py faults.py   anomaly checks, audit log, labelled fault injection
   hardware.py           interface inventory and operation classes
+  identity.py           this device's signing key
+  assurance.py          requirements, hazards, traceability
   replay/               session manifest, incident packages, timeline (AEGIS REPLAY)
   trust/                scenario contracts and runner (AEGIS TRUST)
-trust/scenarios/        scenario files
+trust/scenarios/ suites/   scenario and suite files
+assurance/              requirements and hazards
 backend/tests/          unit and API tests
 tests/simulation/       tests that need a live PX4 SITL
 frontend/               React + TypeScript + React Three Fiber dashboard

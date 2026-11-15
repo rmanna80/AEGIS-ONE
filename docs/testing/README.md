@@ -8,9 +8,9 @@ are a record of what was observed, not a guarantee.
 
 | Suite | Command | Result |
 | --- | --- | --- |
-| Backend unit + API + perception + navigation + search + fleet + security + device + hardware + replay + trust | `pytest` | 241 passed, 1 skipped (2026-11-14; the SITL tests are collected separately) |
+| Backend unit + API + perception + navigation + search + fleet + security + device + hardware + replay + trust + camera + identity + assurance | `pytest` | 283 passed, 3 skipped (2026-11-14; two of the skips are the live SITL tests, run separately) |
 | Lint | `ruff check . && ruff format --check .` | clean |
-| Types | `mypy` (strict) | no issues in 49 source files |
+| Types | `mypy` (strict) | no issues in 55 source files |
 | Frontend unit | `cd frontend && npm test` | 9 passed |
 | Frontend build | `cd frontend && npm run build` | type-checks and builds |
 | Live simulation | `AEGIS_SITL_TESTS=1 pytest tests/simulation -v` | 2 passed in 145 s |
@@ -426,6 +426,33 @@ environments it must refuse).
 Not tested: any of this on the Raspberry Pi; incidents during a fleet or a camera session;
 a recording of a physical vehicle (none exists); the physical-monitoring path against a
 real autopilot.
+
+## Webcam, signed evidence, TRUST suite, traceability (measured 2026-11-14, second iteration)
+
+Development machine (x86, 2 vCPU, 8 GB), PX4 v1.17.0 SITL, built-in simulator. **No real
+webcam is attached to this machine**: the USB camera path was exercised with a stand-in
+device.
+
+| What | Command | Result |
+| --- | --- | --- |
+| TRUST suite `core`, 5 scenarios × 3 runs, clean commit `aa95493` | `python scripts/trust_suite.py --token ... trust/suites/core.json` | **15 of 15 runs passed**, every criterion 3 of 3. Figures in `docs/trust/README.md` |
+| Bridge crash again on the final code | `trust_run.py ... bridge_crash_recovery.json` | PASS, 117 s; incident now titled `telemetry.stale` (the right diagnosis) |
+| Signed incident, live | `incident_tool.py verify <package> --trust <fingerprint>` | Files valid, signature valid, the trusted key; exit 0 |
+| Forged package (file edited, manifest rewritten, re-signed by another key) | same | Files "valid", signature from a different key, rejected; exit 1 |
+| USB camera through backend + dashboard, stand-in device playing a recorded video | `AEGIS_CAMERA=usb:/dev/video36` | Labelled physical, bench notice shown, 28.6 frames/s delivered, 56% not processed (detector 67 ms p50), boxes recorded, no video saved |
+| Incident with a camera (video-file camera) | link-loss scenario with `AEGIS_CAMERA=video:...` | PASS; package of 6 files incl. 289 camera frames and their video; replayed in sync |
+| Incident with the stand-in physical camera | operator mark | 284 frames of labels and boxes, no video, reason recorded; 5 files verify |
+| `camera_check.py` dry run on a video file | `--video <file>` | Ran end to end; with no camera it exits with "No USB camera" |
+| Firewall rule | `sudo bash scripts/lock_mavsdk_port.sh` | Installed; running it again is safe; loopback still connects; the suite ran with it. **Blocking from another computer not tested** |
+| Traceability | `python scripts/trace.py --write-docs` | 23 requirements: 11 verified in simulation, 12 by unit tests, 0 failed, 0 not verified; hazard H-5 open |
+
+Defects found by these runs and fixed: stale data could never be detected from PX4 (the
+adapter stamped states with the sampling time); a stall was reported as frozen data; the
+delay fault went back in time (test tool); `device_key.py` ignored `AEGIS_DEVICE_KEY` and
+showed a different key from the one signing packages.
+
+Not tested: a real webcam (on the Pi or anywhere); the firewall from a second computer;
+comparison of two suite runs (only one exists); any of this on the Pi.
 
 ## Not tested yet
 

@@ -43,12 +43,15 @@ running the backend, flying a simulated vehicle.
 | Scenario runner and results (AEGIS TRUST) | Verified in simulation | Today: 2 scenarios, PASS on all 7 criteria each; 15 unit tests | Two scenarios; one run each per configuration |
 | Hardware interface inventory and operation classes | Implemented | `/api/hardware`; `test_hardware.py` | An inventory, not a validation |
 | Wind, GNSS-denied flight, SLAM, map uncertainty | Missing | | |
-| Physical camera, depth, thermal adapters | Missing | | |
+| USB webcam (physical, bench mount) | Unit-tested only | Stand-in device tests; run through the whole backend and dashboard with frames from a file | Not yet run on a real webcam (`scripts/camera_check.py` on the Pi) |
+| Physical depth and thermal adapters, Pi camera module | Missing | | |
 | Hardware-in-the-loop | Missing | | Named and refused |
 | Physical flight control | Missing, by design | | Refused at start-up |
-| Requirements, traceability, assurance cases (Phase 11) | Missing | | |
-| MAVLink signing, device identity, signed evidence (Phase 12) | Missing | | |
-| Regression comparison between versions (Phase 13) | Missing | | Results are saved in a comparable format |
+| Requirements, hazards, traceability (Phase 11) | Implemented | 23 requirements, 10 hazards, `scripts/trace.py`; link check runs in CI | Developer-written; no formal hazard analysis, no assurance cases, no independent review |
+| Signed incident packages, device key (Phase 12) | Unit-tested, plus live packaging | `test_identity.py` (edit, re-sign, tamper cases) | Key protected only by file permissions; no trusted time |
+| MAVSDK port firewall | Implemented, partly checked | Rule installed and loopback still works on the development machine; suite ran with it in place | Never checked from a second computer |
+| MAVLink signing | Not possible | PX4 v1.17 has none | |
+| Regression comparison between suite runs (Phase 13) | Unit-tested only | `test_assurance.py` | Only one suite run exists so far, so no real comparison has been made |
 | Customer discovery (Phase 15) | Missing | | No prospective user has been asked anything |
 
 ## Defects found and fixed during this assessment
@@ -73,6 +76,25 @@ Each was found by running something, not by reading code.
    mission status in force at the start of the window was outside the slice.
 7. **The dashboard did not build** after `unknown` provenance was added (one component had no
    style for it). The Python tests could not see this.
+
+## Defects found and fixed in the second iteration
+
+Found by the new TRUST scenarios on their first live runs:
+
+8. **Stale data could never be detected from the PX4 adapter.** It stamped each state with
+   the time AEGIS sampled it, not when the data arrived, so the data's age was always about
+   zero. When the MAVSDK bridge crashed, the 3 s outage was reported as `telemetry.frozen`
+   (data arriving but unchanged), which is the wrong diagnosis, and no stale-data alert
+   could fire. States now carry the time their data arrived.
+9. **The frozen-data check counted a stall as frozen data.** It now only counts new data
+   that says the same thing; no new data is the stale-data check's job.
+10. **The delay fault was unrealistic** (a test tool defect, not AEGIS's): at onset it
+    jumped the view back in time, which AEGIS correctly reported as a clock reversal. A
+    slowing link goes quiet, then delivers late; it never goes back.
+
+The first crash scenario also expected the wrong alert (`link.lost`); the outage was
+shorter than the 3 s link timeout, so the right alert is stale data. The scenario now
+accepts either, and it fails if the stall is misdiagnosed as frozen data.
 
 ## What this assessment does not establish
 

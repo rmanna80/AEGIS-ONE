@@ -43,6 +43,7 @@ spin real motors. It needs the same gating as flight and has none yet.
 | Flight controller | `VehicleTelemetrySource`, `MissionExecutor` | PX4 over MAVLink (MAVSDK) | Verified in simulation; physical read-only path unit-tested only |
 | Recorded flight | `VehicleTelemetrySource` | `RecordedTelemetryAdapter` | Verified in simulation |
 | RGB camera | `CameraSource` | TCP frame stream (Gazebo bridge), video file | Verified in simulation |
+| USB webcam (physical, bench) | `CameraSource` | `UsbCameraAdapter` (Video4Linux) | Unit-tested against a stand-in device; not yet run on a real webcam |
 | AI camera / detector | `InferenceBackend` | YOLO via ONNX Runtime (CPU) | Verified in simulation; timed on the Pi 5 with synthetic input |
 | Depth sensor | `DepthSource` | Software ray caster, TCP depth stream (Gazebo) | Verified in simulation |
 | Thermal sensor | `ThermalSource` | Software thermal model | Verified in simulation |
@@ -67,8 +68,11 @@ Findings:
 4. **GNSS, battery and radio have no adapters because nothing reads them directly.** That is
    correct for a companion computer behind an autopilot. It does mean AEGIS cannot see GNSS
    signal quality beyond fix type and satellite count, cell voltages, or radio link quality.
-5. **No physical sensor adapter exists.** Camera frames declaring `physical` provenance are
-   refused. A CSI/USB camera adapter is the first thing a bench experiment needs.
+5. **One physical sensor adapter now exists: a USB webcam, as a bench camera.** It is
+   labelled `physical`, it is never treated as mounted on the vehicle, and its video is not
+   saved by default. Frames that merely *claim* to be physical over the network frame stream
+   are still refused: over a socket the label is only the sender's say-so, whereas the USB
+   adapter opens the device itself. No Pi camera module (CSI) adapter.
 6. **Camera mounting geometry is not modelled** for depth (the sensor is assumed at the
    vehicle origin) and thermal assumes an ideal stabilised mount.
 
@@ -99,7 +103,9 @@ Topology tested: backend on the Pi, PX4 SITL on a PC, MAVLink over the LAN.
 | Network round trip and telemetry arrival rate over Wi-Fi | Only wired/home LAN use so far, unmeasured |
 | Demos 5 and 6, the TRUST scenarios, incident capture | Not run on the Pi |
 | The systemd unit (`deploy/aegis-backend.service`) | Written, never installed |
-| Any camera, any flight controller, any radio attached to the Pi | None owned or connected |
+| The USB webcam on the Pi: format, delivered frame rate, detection time on live frames | Adapter written; `scripts/camera_check.py` is the check |
+| The MAVSDK port blocked from another computer | `scripts/lock_mavsdk_port.sh` written; rule tested on the development machine, never from a second computer |
+| Any flight controller, any radio attached to the Pi | None owned or connected |
 | Power from a flight battery / BEC | Bench supply only |
 
 ### Procedure to collect the missing measurements
@@ -141,6 +147,12 @@ For temperature over time, run it for 20 minutes during repeated flights
 (`--seconds 1200`). The result file is `data/generated/edge_measurements/edge_*.json`; send
 it back and it will be added to this table as hardware-tested evidence.
 
+For the webcam, stop the backend and run `.venv/bin/python scripts/camera_check.py
+--seconds 30` on the Pi (details in `docs/raspberry-pi/README.md`, Part 4). It reports the
+negotiated format, the delivered frame rate, detection time on live frames, frames the
+detector had no time for, and the temperature. Then set `AEGIS_CAMERA=usb` and repeat the
+measurement above during a flight.
+
 What the script cannot measure: one-way delay from the autopilot to the Pi (needs clocks
 synchronised better than the delay), and power draw (needs a meter).
 
@@ -154,11 +166,11 @@ integration. Before a physical flight controller is even connected for monitorin
 | Commands impossible against a non-simulator | Implemented, unit-tested. Never exercised against real hardware |
 | Read-only monitoring mode | Implemented. Never exercised against real hardware |
 | Data labelled `physical` and visibly different in the UI | Implemented, unit-tested |
-| MAVSDK server bound to localhost | **Not done.** It listens on all interfaces without authentication |
-| MAVLink 2 message signing | **Not done** |
+| MAVSDK control port closed to other computers | **Partly.** The server cannot be bound to localhost; `scripts/lock_mavsdk_port.sh` adds a firewall rule. Not yet checked from a second computer |
+| MAVLink 2 message signing | **Not possible with PX4 v1.17** (no signing in its MAVLink module) |
 | Serial (UART) connection configuration and documentation | **Not done** (UDP only so far) |
 | Bench procedure with propellers removed | **Not written** |
-| Physical camera adapter | **Not written** |
+| Physical camera adapter | USB webcam adapter written (bench only); not yet run on a real camera |
 | Recorded physical telemetry replayed through every monitor to check for false alarms | **No such recording exists** |
 | Independent review of this gating | **None** |
 

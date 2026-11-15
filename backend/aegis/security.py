@@ -160,6 +160,7 @@ def posture(
     fault_injection: bool,
     mode: str,
     host: str = "127.0.0.1",
+    signing: str | None = None,
 ) -> list[dict[str, str]]:
     """Checks of this installation's configuration. level: ok | info | warning."""
     checks: list[dict[str, str]] = []
@@ -220,15 +221,32 @@ def posture(
         "mavsdk_grpc",
         "warning",
         "The bundled MAVSDK server opens its control port (50051) on every network interface "
-        "without authentication, and has no option to restrict it. Keep this machine behind a "
-        "firewall; WSL2's default networking does not expose it to the local network.",
+        "without authentication, and has no option to restrict it. Anything that can reach "
+        "it can command the autopilot without the operator token. Block it from other "
+        "computers with: sudo bash scripts/lock_mavsdk_port.sh (then check from another "
+        "computer: nc -zv <this computer's address> 50051 must fail). This check cannot see "
+        "the firewall, so it stays a warning. WSL2's default networking does not expose it.",
     )
     add(
         "mavlink_signing",
         "info",
-        "MAVLink messages between AEGIS and the autopilot are not signed. Acceptable on one "
-        "machine; a radio link would need MAVLink 2 signing.",
+        "MAVLink messages between AEGIS and the autopilot are not signed. PX4 v1.17 has no "
+        "MAVLink 2 signing, so it cannot be turned on with this autopilot version. "
+        "Acceptable on one machine or a wired LAN; a radio link would need it.",
     )
+    if signing is None:
+        add(
+            "incident_signing",
+            "warning",
+            "Incident packages are not signed (no device key). Their hashes still show "
+            "whether files changed, but not which device packaged them.",
+        )
+    else:
+        add(
+            "incident_signing",
+            "ok",
+            f"Incident packages are signed with this device's key ({signing}).",
+        )
     if any(origin.strip() == "*" for origin in cors_origins):
         add("cors", "warning", "Any website may call this API (CORS is set to *).")
     else:

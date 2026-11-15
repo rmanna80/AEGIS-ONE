@@ -1,0 +1,145 @@
+{
+  "schema": "aegis.hazards/1",
+  "note": "A developer's list of what could go wrong and which requirements address it. Not a formal hazard analysis, not complete, and no likelihood or severity has been estimated.",
+  "hazards": [
+    {
+      "id": "H-1",
+      "hazard": "The operator acts on vehicle data that is no longer current.",
+      "causes": [
+        "link loss",
+        "slow link",
+        "AEGIS's bridge crashes",
+        "stalled data shown as live",
+        "mission progress shown after AEGIS lost track of it"
+      ],
+      "mitigated_by": [
+        "R-LINK-1",
+        "R-STALE-1",
+        "R-FROZEN-1",
+        "R-CRASH-1",
+        "R-HONEST-1"
+      ],
+      "residual": "Thresholds were chosen for one simulator. A real radio link can drop and reorder packets in ways not yet tested."
+    },
+    {
+      "id": "H-2",
+      "hazard": "Simulated or replayed data is taken for a real aircraft, or the reverse.",
+      "causes": [
+        "a mislabelled source",
+        "a replay shown without its label"
+      ],
+      "mitigated_by": [
+        "R-PROV-1",
+        "R-PROV-2",
+        "R-PROV-3"
+      ],
+      "residual": "The physical path has only been unit-tested; no physical autopilot has been connected."
+    },
+    {
+      "id": "H-3",
+      "hazard": "Software meant for simulation commands a physical aircraft.",
+      "causes": [
+        "a real autopilot on the simulator's port",
+        "configuration error"
+      ],
+      "mitigated_by": [
+        "R-SAFE-1",
+        "R-SAFE-2",
+        "R-SAFE-3"
+      ],
+      "residual": "The simulator check relies on parameters only PX4's simulator build reports; a modified firmware could imitate them."
+    },
+    {
+      "id": "H-4",
+      "hazard": "AI or monitor output moves the vehicle without an operator decision.",
+      "causes": [
+        "tracking wired to control",
+        "a monitor that commands"
+      ],
+      "mitigated_by": [
+        "R-SAFE-4"
+      ],
+      "residual": "The navigation auto-hold (AEGIS_NAV_AUTO_HOLD) does command Hold by design; it is documented and can be turned off."
+    },
+    {
+      "id": "H-5",
+      "hazard": "Someone other than the operator commands the vehicle.",
+      "causes": [
+        "a guessed or leaked token",
+        "the open MAVSDK control port",
+        "unsigned MAVLink"
+      ],
+      "mitigated_by": [
+        "R-SEC-1"
+      ],
+      "residual": "OPEN: the MAVSDK control port listens on every interface and cannot be restricted by the software. scripts/lock_mavsdk_port.sh blocks it but has not been checked from another computer. PX4 v1.17 has no MAVLink signing."
+    },
+    {
+      "id": "H-6",
+      "hazard": "An incident is investigated from evidence that was altered, incomplete or misdescribed.",
+      "causes": [
+        "editing after the fact",
+        "gaps in recording",
+        "a diagnosis stated as fact"
+      ],
+      "mitigated_by": [
+        "R-EVID-1",
+        "R-EVID-2",
+        "R-EVID-3",
+        "R-SEC-2",
+        "R-SEC-3"
+      ],
+      "residual": "Anyone holding the device key, or write access to the whole session including the audit log, can forge consistently. No external timestamp or anchor."
+    },
+    {
+      "id": "H-7",
+      "hazard": "The position shown is wrong.",
+      "causes": [
+        "GNSS loss",
+        "spoofing",
+        "estimator error"
+      ],
+      "mitigated_by": [
+        "R-GNSS-1",
+        "R-NAV-1"
+      ],
+      "residual": "Only AEGIS's copy is faulted in tests; PX4's estimator is never given bad GNSS. Spoofing that is consistent with the reported velocity is not detected."
+    },
+    {
+      "id": "H-8",
+      "hazard": "False alarms teach operators to ignore alerts.",
+      "causes": [
+        "thresholds tuned too tight",
+        "one fault showing as several alerts"
+      ],
+      "mitigated_by": [
+        "R-FA-1"
+      ],
+      "residual": "Measured on one simulator only. Real sensor noise is not represented."
+    },
+    {
+      "id": "H-9",
+      "hazard": "A mission is flown outside the permitted area.",
+      "causes": [
+        "a planning error",
+        "a waypoint typed wrong"
+      ],
+      "mitigated_by": [
+        "R-GEO-1"
+      ],
+      "residual": "AEGIS also uploads the fence to PX4, whose own geofence enforces it in flight; that enforcement is PX4's, not tested here."
+    },
+    {
+      "id": "H-10",
+      "hazard": "Fault injection reaches a real vehicle.",
+      "causes": [
+        "fault injection enabled on a physical setup"
+      ],
+      "mitigated_by": [
+        "R-FAULT-1",
+        "R-SAFE-1"
+      ],
+      "residual": "None known beyond H-3."
+    }
+  ]
+}

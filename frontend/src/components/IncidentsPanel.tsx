@@ -92,6 +92,13 @@ export function IncidentsPanel() {
               {incident.status === "packaged" && (
                 <p className="num mt-0.5 text-dim">
                   sha256 {incident.manifest_sha256?.slice(0, 12)}… ·{" "}
+                  {incident.signed_by ? (
+                    <span title={`Signed with this device's key ${incident.signed_by}`}>
+                      signed {incident.signed_by.slice(0, 9)}… ·{" "}
+                    </span>
+                  ) : (
+                    <span className="text-warn">unsigned · </span>
+                  )}
                   <a
                     className="text-track underline"
                     href={`/api/incidents/${encodeURIComponent(incident.incident_id)}/export`}

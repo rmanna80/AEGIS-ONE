@@ -97,8 +97,16 @@ inventory and the list of what is missing are in
   autopilot that answers without that proof is labelled `physical` and can never be
   commanded by that process.
 - Hardware-in-the-loop is treated like flight, not like simulation, and is not implemented.
-- Fault injection only works against an attested simulator and only alters AEGIS's copy of
-  the data.
+- Fault injection only works against an attested simulator. It alters AEGIS's copy of the
+  data, except for two process faults: `external_hold` (asks the simulated autopilot to
+  Hold) and `bridge_crash` (kills AEGIS's own MAVSDK bridge process, which AEGIS must notice
+  and restart). Neither touches a physical system.
+- The MAVSDK control port listens on every network interface and the bundled server cannot
+  be restricted. `scripts/lock_mavsdk_port.sh` closes it to other computers with a firewall
+  rule. Until that is in place and checked from another computer, anyone on the network can
+  command a connected autopilot without the operator token.
+- A physical camera is a bench camera: its detections are never placed in the world or
+  used for control, and its video is not saved unless the operator turns that on.
 
 Hardware work requires, at minimum: a separate hardware adapter and configuration, bench
 tests with propellers removed, a manual-override (RC) path that does not depend on AEGIS,

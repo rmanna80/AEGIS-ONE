@@ -1,0 +1,750 @@
+{
+  "schema": "aegis.trust-suite-result/1",
+  "suite_id": "core",
+  "title": "Detection, evidence and recovery for the five core faults",
+  "status": "PASS",
+  "status_reason": "all 15 runs passed",
+  "repeats": 3,
+  "started_utc_s": 1794701631.379,
+  "duration_s": 1547.1,
+  "software": {
+    "aegis_version": "0.1.0",
+    "git_commit": "aa9549381bed0ba8f2600d1bd7a5379f2499631d",
+    "git_uncommitted_changes": false,
+    "python": "3.12.3",
+    "platform": "Linux-6.18.44-fc-v470-x86_64-with-glibc2.39"
+  },
+  "device": {
+    "model": null,
+    "machine": "x86_64",
+    "cpu_count": 2,
+    "hostname_sha256": "5bce98f73f3ed0c8"
+  },
+  "scenarios": {
+    "link-loss-detection": {
+      "status": "PASS",
+      "why": "all 3 runs passed",
+      "runs": [
+        "PASS",
+        "PASS",
+        "PASS"
+      ],
+      "scenario_sha256": [
+        "5a9c825a7490f743556741c676681587403610e7bd9e385abd0f75683565bdf8"
+      ],
+      "criteria": {
+        "C1": {
+          "description": "No link or anomaly alert before the fault",
+          "safety_critical": false,
+          "expected": "no alert starting with ['nav.', 'telemetry.', 'battery.implausible', 'control.', 'security.', 'link.', 'gps.'] before the fault",
+          "statuses": [
+            "PASS",
+            "PASS",
+            "PASS"
+          ],
+          "passed": "3 of 3"
+        },
+        "C2": {
+          "description": "Link loss is alerted quickly",
+          "safety_critical": true,
+          "expected": "alert link.lost within 3 s of the fault",
+          "statuses": [
+            "PASS",
+            "PASS",
+            "PASS"
+          ],
+          "passed": "3 of 3"
+        },
+        "C3": {
+          "description": "The alert clears when the link returns",
+          "safety_critical": false,
+          "expected": "alert link.lost clears within 5 s of the fault ending",
+          "statuses": [
+            "PASS",
+            "PASS",
+            "PASS"
+          ],
+          "passed": "3 of 3"
+        },
+        "C4": {
+          "description": "The mission is not interrupted by the monitors",
+          "safety_critical": false,
+          "expected": "mission phase is one of ['active', 'returning', 'completed']",
+          "statuses": [
+            "PASS",
+            "PASS",
+            "PASS"
+          ],
+          "passed": "3 of 3"
+        },
+        "C5": {
+          "description": "The incident is preserved",
+          "safety_critical": false,
+          "expected": "an incident package is produced",
+          "statuses": [
+            "PASS",
+            "PASS",
+            "PASS"
+          ],
+          "passed": "3 of 3"
+        },
+        "C6": {
+          "description": "The preserved evidence verifies",
+          "safety_critical": false,
+          "expected": "the incident package verifies against its manifest",
+          "statuses": [
+            "PASS",
+            "PASS",
+            "PASS"
+          ],
+          "passed": "3 of 3"
+        },
+        "C7": {
+          "description": "The record of what AEGIS saw during the event is complete",
+          "safety_critical": false,
+          "expected": "incident_completeness_at_least",
+          "statuses": [
+            "PASS",
+            "PASS",
+            "PASS"
+          ],
+          "passed": "3 of 3"
+        },
+        "C8": {
+          "description": "The fault causes no other monitored alert (no false alarms)",
+          "safety_critical": false,
+          "expected": "no monitored alert other than the ones this fault should cause",
+          "statuses": [
+            "PASS",
+            "PASS",
+            "PASS"
+          ],
+          "passed": "3 of 3"
+        },
+        "C9": {
+          "description": "After the test the operator's Return works; the vehicle lands",
+          "safety_critical": false,
+          "expected": "after the test, the operator's Return is accepted and the vehicle lands and disarms",
+          "statuses": [
+            "PASS",
+            "PASS",
+            "PASS"
+          ],
+          "passed": "3 of 3"
+        }
+      },
+      "measurements": {
+        "alert_raised_after_s:link.lost": {
+          "runs_measured": 3,
+          "min": 0.2,
+          "median": 0.2,
+          "max": 0.2
+        },
+        "alert_cleared_after_fault_end_s:link.lost": {
+          "runs_measured": 3,
+          "min": 0.05,
+          "median": 0.06,
+          "max": 0.27
+        },
+        "incident_state_record_fraction": {
+          "runs_measured": 3,
+          "min": 1.0,
+          "median": 1.0,
+          "max": 1.0
+        }
+      }
+    },
+    "stale-telemetry-detection": {
+      "status": "PASS",
+      "why": "all 3 runs passed",
+      "runs": [
+        "PASS",
+        "PASS",
+        "PASS"
+      ],
+      "scenario_sha256": [
+        "9a99f3779aedcddd5c40a5d7c6cfeb3b103fe61c34124311417fd4b39468f6eb"
+      ],
+      "criteria": {
+        "C1": {
+          "description": "No telemetry alert before the fault",
+          "safety_critical": false,
+          "expected": "no alert starting with ['nav.', 'telemetry.', 'battery.implausible', 'control.', 'security.', 'link.', 'gps.'] before the fault",
+          "statuses": [
+            "PASS",
+            "PASS",
+            "PASS"
+          ],
+          "passed": "3 of 3"
+        },
+        "C2": {
+          "description": "Frozen data is alerted quickly",
+          "safety_critical": true,
+          "expected": "alert telemetry.frozen within 4 s of the fault",
+          "statuses": [
+            "PASS",
+            "PASS",
+            "PASS"
+          ],
+          "passed": "3 of 3"
+        },
+        "C3": {
+          "description": "Altered data is labelled",
+          "safety_critical": false,
+          "expected": "altered data is labelled as injected",
+          "statuses": [
+            "PASS",
+            "PASS",
+            "PASS"
+          ],
+          "passed": "3 of 3"
+        },
+        "C4": {
+          "description": "The mission is not interrupted by the monitors",
+          "safety_critical": false,
+          "expected": "mission phase is one of ['active', 'returning', 'completed']",
+          "statuses": [
+            "PASS",
+            "PASS",
+            "PASS"
+          ],
+          "passed": "3 of 3"
+        },
+        "C5": {
+          "description": "The incident is preserved",
+          "safety_critical": false,
+          "expected": "an incident package is produced",
+          "statuses": [
+            "PASS",
+            "PASS",
+            "PASS"
+          ],
+          "passed": "3 of 3"
+        },
+        "C6": {
+          "description": "The preserved evidence verifies",
+          "safety_critical": false,
+          "expected": "the incident package verifies against its manifest",
+          "statuses": [
+            "PASS",
+            "PASS",
+            "PASS"
+          ],
+          "passed": "3 of 3"
+        },
+        "C7": {
+          "description": "The record of what AEGIS saw during the event is complete",
+          "safety_critical": false,
+          "expected": "incident_completeness_at_least",
+          "statuses": [
+            "PASS",
+            "PASS",
+            "PASS"
+          ],
+          "passed": "3 of 3"
+        },
+        "C8": {
+          "description": "The fault causes no other monitored alert (no false alarms)",
+          "safety_critical": false,
+          "expected": "no monitored alert other than the ones this fault should cause",
+          "statuses": [
+            "PASS",
+            "PASS",
+            "PASS"
+          ],
+          "passed": "3 of 3"
+        },
+        "C9": {
+          "description": "After the test the operator's Return works; the vehicle lands",
+          "safety_critical": false,
+          "expected": "after the test, the operator's Return is accepted and the vehicle lands and disarms",
+          "statuses": [
+            "PASS",
+            "PASS",
+            "PASS"
+          ],
+          "passed": "3 of 3"
+        }
+      },
+      "measurements": {
+        "alert_raised_after_s:telemetry.frozen": {
+          "runs_measured": 3,
+          "min": 2.01,
+          "median": 2.02,
+          "max": 2.23
+        },
+        "incident_state_record_fraction": {
+          "runs_measured": 3,
+          "min": 1.0,
+          "median": 1.0,
+          "max": 1.002
+        }
+      }
+    },
+    "gnss-loss-detection": {
+      "status": "PASS",
+      "why": "all 3 runs passed",
+      "runs": [
+        "PASS",
+        "PASS",
+        "PASS"
+      ],
+      "scenario_sha256": [
+        "8072e0f46be67ecba9972b192b7277209417e4bff062fdd6f050aef698d3062b"
+      ],
+      "criteria": {
+        "C1": {
+          "description": "No monitored alert before the fault",
+          "safety_critical": false,
+          "expected": "no alert starting with ['nav.', 'telemetry.', 'battery.implausible', 'control.', 'security.', 'link.', 'gps.'] before the fault",
+          "statuses": [
+            "PASS",
+            "PASS",
+            "PASS"
+          ],
+          "passed": "3 of 3"
+        },
+        "C2": {
+          "description": "Loss of fix is alerted quickly",
+          "safety_critical": true,
+          "expected": "alert gps.no_fix within 1 s of the fault",
+          "statuses": [
+            "PASS",
+            "PASS",
+            "PASS"
+          ],
+          "passed": "3 of 3"
+        },
+        "C3": {
+          "description": "The alert clears when the fix returns",
+          "safety_critical": false,
+          "expected": "alert gps.no_fix clears within 3 s of the fault ending",
+          "statuses": [
+            "PASS",
+            "PASS",
+            "PASS"
+          ],
+          "passed": "3 of 3"
+        },
+        "C4": {
+          "description": "The mission is not interrupted by the monitors",
+          "safety_critical": false,
+          "expected": "mission phase is one of ['active', 'returning', 'completed']",
+          "statuses": [
+            "PASS",
+            "PASS",
+            "PASS"
+          ],
+          "passed": "3 of 3"
+        },
+        "C5": {
+          "description": "The incident is preserved",
+          "safety_critical": false,
+          "expected": "an incident package is produced",
+          "statuses": [
+            "PASS",
+            "PASS",
+            "PASS"
+          ],
+          "passed": "3 of 3"
+        },
+        "C6": {
+          "description": "The preserved evidence verifies",
+          "safety_critical": false,
+          "expected": "the incident package verifies against its manifest",
+          "statuses": [
+            "PASS",
+            "PASS",
+            "PASS"
+          ],
+          "passed": "3 of 3"
+        },
+        "C7": {
+          "description": "The record of what AEGIS saw during the event is complete",
+          "safety_critical": false,
+          "expected": "incident_completeness_at_least",
+          "statuses": [
+            "PASS",
+            "PASS",
+            "PASS"
+          ],
+          "passed": "3 of 3"
+        },
+        "C8": {
+          "description": "Altered data is labelled",
+          "safety_critical": false,
+          "expected": "altered data is labelled as injected",
+          "statuses": [
+            "PASS",
+            "PASS",
+            "PASS"
+          ],
+          "passed": "3 of 3"
+        },
+        "C9": {
+          "description": "The fault causes no other monitored alert (no false alarms)",
+          "safety_critical": false,
+          "expected": "no monitored alert other than the ones this fault should cause",
+          "statuses": [
+            "PASS",
+            "PASS",
+            "PASS"
+          ],
+          "passed": "3 of 3"
+        },
+        "C10": {
+          "description": "After the test the operator's Return works; the vehicle lands",
+          "safety_critical": false,
+          "expected": "after the test, the operator's Return is accepted and the vehicle lands and disarms",
+          "statuses": [
+            "PASS",
+            "PASS",
+            "PASS"
+          ],
+          "passed": "3 of 3"
+        }
+      },
+      "measurements": {
+        "alert_raised_after_s:gps.no_fix": {
+          "runs_measured": 3,
+          "min": 0.2,
+          "median": 0.2,
+          "max": 0.2
+        },
+        "alert_cleared_after_fault_end_s:gps.no_fix": {
+          "runs_measured": 3,
+          "min": 0.05,
+          "median": 0.25,
+          "max": 0.25
+        },
+        "incident_state_record_fraction": {
+          "runs_measured": 3,
+          "min": 1.0,
+          "median": 1.0,
+          "max": 1.0
+        }
+      }
+    },
+    "telemetry-delay-detection": {
+      "status": "PASS",
+      "why": "all 3 runs passed",
+      "runs": [
+        "PASS",
+        "PASS",
+        "PASS"
+      ],
+      "scenario_sha256": [
+        "8f64aaf58066083c73dfc8ad1cf1c1bcc5f0655cfecc013e9344a1e0eee025fe"
+      ],
+      "criteria": {
+        "C1": {
+          "description": "No monitored alert before the fault",
+          "safety_critical": false,
+          "expected": "no alert starting with ['nav.', 'telemetry.', 'battery.implausible', 'control.', 'security.', 'link.', 'gps.'] before the fault",
+          "statuses": [
+            "PASS",
+            "PASS",
+            "PASS"
+          ],
+          "passed": "3 of 3"
+        },
+        "C2": {
+          "description": "Late data is alerted quickly",
+          "safety_critical": true,
+          "expected": "alert telemetry.stale within 2.5 s of the fault",
+          "statuses": [
+            "PASS",
+            "PASS",
+            "PASS"
+          ],
+          "passed": "3 of 3"
+        },
+        "C3": {
+          "description": "The alert clears when data is current again",
+          "safety_critical": false,
+          "expected": "alert telemetry.stale clears within 3 s of the fault ending",
+          "statuses": [
+            "PASS",
+            "PASS",
+            "PASS"
+          ],
+          "passed": "3 of 3"
+        },
+        "C4": {
+          "description": "The mission is not interrupted by the monitors",
+          "safety_critical": false,
+          "expected": "mission phase is one of ['active', 'returning', 'completed']",
+          "statuses": [
+            "PASS",
+            "PASS",
+            "PASS"
+          ],
+          "passed": "3 of 3"
+        },
+        "C5": {
+          "description": "The incident is preserved",
+          "safety_critical": false,
+          "expected": "an incident package is produced",
+          "statuses": [
+            "PASS",
+            "PASS",
+            "PASS"
+          ],
+          "passed": "3 of 3"
+        },
+        "C6": {
+          "description": "The preserved evidence verifies",
+          "safety_critical": false,
+          "expected": "the incident package verifies against its manifest",
+          "statuses": [
+            "PASS",
+            "PASS",
+            "PASS"
+          ],
+          "passed": "3 of 3"
+        },
+        "C7": {
+          "description": "The record of what AEGIS saw during the event is complete",
+          "safety_critical": false,
+          "expected": "incident_completeness_at_least",
+          "statuses": [
+            "PASS",
+            "PASS",
+            "PASS"
+          ],
+          "passed": "3 of 3"
+        },
+        "C8": {
+          "description": "Altered data is labelled",
+          "safety_critical": false,
+          "expected": "altered data is labelled as injected",
+          "statuses": [
+            "PASS",
+            "PASS",
+            "PASS"
+          ],
+          "passed": "3 of 3"
+        },
+        "C9": {
+          "description": "The fault causes no other monitored alert (no false alarms)",
+          "safety_critical": false,
+          "expected": "no monitored alert other than the ones this fault should cause",
+          "statuses": [
+            "PASS",
+            "PASS",
+            "PASS"
+          ],
+          "passed": "3 of 3"
+        },
+        "C10": {
+          "description": "After the test the operator's Return works; the vehicle lands",
+          "safety_critical": false,
+          "expected": "after the test, the operator's Return is accepted and the vehicle lands and disarms",
+          "statuses": [
+            "PASS",
+            "PASS",
+            "PASS"
+          ],
+          "passed": "3 of 3"
+        }
+      },
+      "measurements": {
+        "alert_raised_after_s:telemetry.stale": {
+          "runs_measured": 3,
+          "min": 2.22,
+          "median": 2.22,
+          "max": 2.22
+        },
+        "alert_cleared_after_fault_end_s:telemetry.stale": {
+          "runs_measured": 3,
+          "min": 0.07,
+          "median": 0.07,
+          "max": 0.27
+        },
+        "incident_state_record_fraction": {
+          "runs_measured": 3,
+          "min": 1.0,
+          "median": 1.0,
+          "max": 1.0
+        }
+      }
+    },
+    "bridge-crash-recovery": {
+      "status": "PASS",
+      "why": "all 3 runs passed",
+      "runs": [
+        "PASS",
+        "PASS",
+        "PASS"
+      ],
+      "scenario_sha256": [
+        "360d43180e643965bb895dbe1845388414e3cfd5225ed7f06a93edea1b3e3bba"
+      ],
+      "criteria": {
+        "C1": {
+          "description": "No monitored alert before the crash",
+          "safety_critical": false,
+          "expected": "no alert starting with ['nav.', 'telemetry.', 'battery.implausible', 'control.', 'security.', 'link.', 'gps.'] before the fault",
+          "statuses": [
+            "PASS",
+            "PASS",
+            "PASS"
+          ],
+          "passed": "3 of 3"
+        },
+        "C2": {
+          "description": "The operator is told data has stopped arriving",
+          "safety_critical": true,
+          "expected": "alert link.lost or telemetry.stale within 3 s of the fault",
+          "statuses": [
+            "PASS",
+            "PASS",
+            "PASS"
+          ],
+          "passed": "3 of 3"
+        },
+        "C3": {
+          "description": "AEGIS restarts the bridge",
+          "safety_critical": false,
+          "expected": "AEGIS notices the dead bridge and restarts it",
+          "statuses": [
+            "PASS",
+            "PASS",
+            "PASS"
+          ],
+          "passed": "3 of 3"
+        },
+        "C4": {
+          "description": "Data is current again within 30 s",
+          "safety_critical": false,
+          "expected": "alert link.lost or telemetry.stale clears within 30 s of the fault ending",
+          "statuses": [
+            "PASS",
+            "PASS",
+            "PASS"
+          ],
+          "passed": "3 of 3"
+        },
+        "C5": {
+          "description": "PX4 keeps flying its mission throughout",
+          "safety_critical": false,
+          "expected": "whenever connected, the autopilot reports one of ['MISSION']",
+          "statuses": [
+            "PASS",
+            "PASS",
+            "PASS"
+          ],
+          "passed": "3 of 3"
+        },
+        "C6": {
+          "description": "AEGIS reports it lost track of the mission instead of showing stale progress",
+          "safety_critical": false,
+          "expected": "mission phase is one of ['failed']",
+          "statuses": [
+            "PASS",
+            "PASS",
+            "PASS"
+          ],
+          "passed": "3 of 3"
+        },
+        "C7": {
+          "description": "After recovery the operator's Return works; the vehicle lands",
+          "safety_critical": true,
+          "expected": "after the test, the operator's Return is accepted and the vehicle lands and disarms",
+          "statuses": [
+            "PASS",
+            "PASS",
+            "PASS"
+          ],
+          "passed": "3 of 3"
+        },
+        "C8": {
+          "description": "The incident is preserved",
+          "safety_critical": false,
+          "expected": "an incident package is produced",
+          "statuses": [
+            "PASS",
+            "PASS",
+            "PASS"
+          ],
+          "passed": "3 of 3"
+        },
+        "C9": {
+          "description": "The preserved evidence verifies",
+          "safety_critical": false,
+          "expected": "the incident package verifies against its manifest",
+          "statuses": [
+            "PASS",
+            "PASS",
+            "PASS"
+          ],
+          "passed": "3 of 3"
+        },
+        "C10": {
+          "description": "The record of what AEGIS saw during the event is complete",
+          "safety_critical": false,
+          "expected": "incident_completeness_at_least",
+          "statuses": [
+            "PASS",
+            "PASS",
+            "PASS"
+          ],
+          "passed": "3 of 3"
+        },
+        "C11": {
+          "description": "The crash causes no other monitored alert",
+          "safety_critical": false,
+          "expected": "no monitored alert other than the ones this fault should cause",
+          "statuses": [
+            "PASS",
+            "PASS",
+            "PASS"
+          ],
+          "passed": "3 of 3"
+        }
+      },
+      "measurements": {
+        "alert_raised_after_s:link.lost or telemetry.stale": {
+          "runs_measured": 3,
+          "min": 2.22,
+          "median": 2.22,
+          "max": 2.23
+        },
+        "alert_cleared_after_fault_end_s:link.lost or telemetry.stale": {
+          "runs_measured": 3,
+          "min": 2.23,
+          "median": 2.24,
+          "max": 4.04
+        },
+        "incident_state_record_fraction": {
+          "runs_measured": 3,
+          "min": 1.0,
+          "median": 1.0,
+          "max": 1.0
+        }
+      }
+    }
+  },
+  "run_files": [
+    "data/generated/trust_results/link-loss-detection_20261114T191524_run1.json",
+    "data/generated/trust_results/link-loss-detection_20261114T191658_run2.json",
+    "data/generated/trust_results/link-loss-detection_20261114T191828_run3.json",
+    "data/generated/trust_results/stale-telemetry-detection_20261114T192015_run1.json",
+    "data/generated/trust_results/stale-telemetry-detection_20261114T192205_run2.json",
+    "data/generated/trust_results/stale-telemetry-detection_20261114T192355_run3.json",
+    "data/generated/trust_results/gnss-loss-detection_20261114T192530_run1.json",
+    "data/generated/trust_results/gnss-loss-detection_20261114T192704_run2.json",
+    "data/generated/trust_results/gnss-loss-detection_20261114T192841_run3.json",
+    "data/generated/trust_results/telemetry-delay-detection_20261114T193019_run1.json",
+    "data/generated/trust_results/telemetry-delay-detection_20261114T193156_run2.json",
+    "data/generated/trust_results/telemetry-delay-detection_20261114T193336_run3.json",
+    "data/generated/trust_results/bridge-crash-recovery_20261114T193528_run1.json",
+    "data/generated/trust_results/bridge-crash-recovery_20261114T193743_run2.json",
+    "data/generated/trust_results/bridge-crash-recovery_20261114T193938_run3.json"
+  ],
+  "limitations": [
+    "Runs on one simulator and one machine. The spread is of these runs only and is not a statistical guarantee.",
+    "Pass limits were chosen by the developers, not derived from a hazard analysis.",
+    "Not a safety certification."
+  ]
+}

@@ -17,6 +17,8 @@ dependencies = [
     # binding with a different API at v4; "mavsdk-grpc" is the maintained
     # continuation of the API this project uses.
     "mavsdk-grpc>=4.0,<5",
+    # Ed25519 signatures on incident packages (device identity).
+    "cryptography>=42",
 ]
 
 [project.optional-dependencies]

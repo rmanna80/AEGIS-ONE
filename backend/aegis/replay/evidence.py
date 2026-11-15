@@ -19,6 +19,8 @@ from pathlib import Path
 from typing import Any
 
 MANIFEST_NAME = "MANIFEST.json"
+SIGNATURE_NAME = "MANIFEST.sig"  # written after the manifest, signs it; not listed in it
+NOT_LISTED = {MANIFEST_NAME, SIGNATURE_NAME}
 MANIFEST_SCHEMA = "aegis.evidence-manifest/1"
 
 
@@ -33,7 +35,7 @@ def sha256_file(path: Path) -> str:
 def write_manifest(folder: Path, description: str) -> dict[str, Any]:
     """Hash every file under ``folder`` (except the manifest) and write the manifest."""
     files = {}
-    for path in sorted(p for p in folder.rglob("*") if p.is_file() and p.name != MANIFEST_NAME):
+    for path in sorted(p for p in folder.rglob("*") if p.is_file() and p.name not in NOT_LISTED):
         files[path.relative_to(folder).as_posix()] = {
             "sha256": sha256_file(path),
             "bytes": path.stat().st_size,
@@ -69,7 +71,7 @@ def verify_manifest(folder: Path, expected_manifest_sha256: str | None = None) -
     present = {
         p.relative_to(folder).as_posix()
         for p in folder.rglob("*")
-        if p.is_file() and p.name != MANIFEST_NAME
+        if p.is_file() and p.name not in NOT_LISTED
     }
     for name, entry in sorted(listed.items()):
         if name not in present:

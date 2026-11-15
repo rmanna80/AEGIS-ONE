@@ -1,13 +1,13 @@
 {
   "schema": "aegis.trust-result/1",
-  "scenario_id": "link-loss-detection",
-  "scenario_sha256": "c2ba696b4ea54caaaa214149068bd06bb0e7dd0f1a4c4e3ad380e4f66ebc864d",
-  "title": "Loss of the vehicle link is detected, reported and recorded",
-  "purpose": "The operator must be told within seconds when vehicle data stops arriving, and the surrounding record must be preserved for investigation. Requirement R-LINK-1.",
+  "scenario_id": "gnss-loss-detection",
+  "scenario_sha256": "8072e0f46be67ecba9972b192b7277209417e4bff062fdd6f050aef698d3062b",
+  "title": "Loss of GNSS fix is detected and reported",
+  "purpose": "Without a GNSS fix the position estimate degrades; the operator must be told at once. Requirement R-GNSS-1.",
   "status": "PASS",
   "status_reason": "every criterion passed",
-  "started_utc_s": 1794690972.91,
-  "duration_s": 100.4,
+  "started_utc_s": 1794702235.651,
+  "duration_s": 94.5,
   "environment": {
     "simulator": "px4_sitl",
     "scenario_id": "open_field",
@@ -23,8 +23,8 @@
   "simulated_or_physical": "simulated",
   "software": {
     "aegis_version": "0.1.0",
-    "git_commit": "c442125cd33f64dc2f3aa5d4b2b8a0cb7bb9a22e",
-    "git_uncommitted_changes": true,
+    "git_commit": "aa9549381bed0ba8f2600d1bd7a5379f2499631d",
+    "git_uncommitted_changes": false,
     "python": "3.12.3",
     "platform": "Linux-6.18.44-fc-v470-x86_64-with-glibc2.39"
   },
@@ -34,30 +34,30 @@
     "cpu_count": 2,
     "hostname_sha256": "5bce98f73f3ed0c8"
   },
-  "expected_behaviour": "A critical link.lost alert appears within 3 s and clears within 5 s of the link returning. An incident package is produced and verifies. The vehicle is not commanded by the monitors and continues its mission.",
+  "expected_behaviour": "A critical gps.no_fix alert within 1 s, cleared within 3 s of the fix returning. The altered data is labelled. The monitors do not command the vehicle. An incident package is produced, verifies and is complete. No other alert. The operator's Return works afterwards.",
   "criteria": [
     {
       "id": "C1",
-      "description": "No link or anomaly alert before the fault",
+      "description": "No monitored alert before the fault",
       "status": "PASS",
-      "expected": "no alert starting with ['nav.', 'telemetry.', 'battery.implausible', 'control.', 'security.', 'link.'] before the fault",
+      "expected": "no alert starting with ['nav.', 'telemetry.', 'battery.implausible', 'control.', 'security.', 'link.', 'gps.'] before the fault",
       "observed": "alerts before the fault: none",
       "safety_critical": false
     },
     {
       "id": "C2",
-      "description": "Link loss is alerted quickly",
+      "description": "Loss of fix is alerted quickly",
       "status": "PASS",
-      "expected": "alert link.lost within 3 s of the fault",
+      "expected": "alert gps.no_fix within 1 s of the fault",
       "observed": "raised after 0.20 s",
       "safety_critical": true
     },
     {
       "id": "C3",
-      "description": "The alert clears when the link returns",
+      "description": "The alert clears when the fix returns",
       "status": "PASS",
-      "expected": "alert link.lost clears within 5 s of the fault ending",
-      "observed": "cleared 0.26 s after the fault ended",
+      "expected": "alert gps.no_fix clears within 3 s of the fault ending",
+      "observed": "cleared 0.05 s after the fault ended",
       "safety_critical": false
     },
     {
@@ -91,44 +91,74 @@
       "expected": "incident_completeness_at_least",
       "observed": "100% of the expected state records; 0 s with none",
       "safety_critical": false
+    },
+    {
+      "id": "C8",
+      "description": "Altered data is labelled",
+      "status": "PASS",
+      "expected": "altered data is labelled as injected",
+      "observed": "labelled",
+      "safety_critical": false
+    },
+    {
+      "id": "C9",
+      "description": "The fault causes no other monitored alert (no false alarms)",
+      "status": "PASS",
+      "expected": "no monitored alert other than the ones this fault should cause",
+      "observed": "other alerts: none",
+      "safety_critical": false
+    },
+    {
+      "id": "C10",
+      "description": "After the test the operator's Return works; the vehicle lands",
+      "status": "PASS",
+      "expected": "after the test, the operator's Return is accepted and the vehicle lands and disarms",
+      "observed": "landed and disarmed",
+      "safety_critical": false
     }
   ],
   "measurements": {
     "alerts_before_fault": [],
     "alert_raised_after_s": {
-      "link.lost": 0.2
+      "gps.no_fix": 0.2
     },
     "alert_cleared_after_fault_end_s": {
-      "link.lost": 0.26
+      "gps.no_fix": 0.05
     },
     "snapshot_labelled_during_fault": true,
+    "alerts_during_fault": [
+      "gps.no_fix"
+    ],
+    "flight_modes_during_fault": [
+      "MISSION"
+    ],
     "mission_phase_after_fault": "active",
+    "bridge_restarts_during_fault": 0,
     "incident_state_record_fraction": 1.0,
     "incident_seconds_without_records": 0,
-    "incident_seconds_without_link": 6.0,
+    "incident_seconds_without_link": 0.0,
     "incident_packaged": true,
     "incident_verifies": true,
     "landed_after_test": true
   },
   "evidence": {
-    "session_id": "20261114T161557",
-    "incident_id": "INC-20261114T161635-01",
-    "incident_folder": "/home/claude/aegis-one/data/generated/sessions/20261114T161557/incidents/INC-20261114T161635-01",
-    "incident_manifest_sha256": "88b44f2f462862337a7a2f3ebdcd5a509ce2473e58c22dd3108fe03811965afd",
+    "session_id": "20261114T191331",
+    "incident_id": "INC-20261114T192416-07",
+    "incident_folder": "/home/claude/aegis-one/data/generated/sessions/20261114T191331/incidents/INC-20261114T192416-07",
+    "incident_manifest_sha256": "75bd7338966690f09923209acf6d37ccbc33ebb9d23981c401fb6c703cb3737f",
     "incident_completeness": {
       "state_records": 290,
       "state_records_expected_at_full_rate": 290,
       "fraction_of_expected": 1.0,
       "gaps_in_state_records": [],
       "seconds_without_state_records": 0,
-      "state_records_without_link": 60,
-      "seconds_without_link": 6.0,
+      "state_records_without_link": 0,
+      "seconds_without_link": 0.0,
       "note": "A record without a link holds the last values AEGIS had, marked connected=false; it is not a measurement of the vehicle."
     }
   },
   "limitations": [
-    "The link is reported as down inside AEGIS; MAVLink between PX4 and AEGIS is not actually interrupted.",
-    "Built-in PX4 simulator only; no network between the vehicle and the backend.",
+    "Only AEGIS's copy loses the fix. PX4's estimator keeps its real GNSS, so this does not test the vehicle's behaviour without GNSS.",
     "The fault is injected into AEGIS's copy of the telemetry; the vehicle itself keeps receiving correct data.",
     "One run under one set of conditions. It does not show behaviour under other conditions, and it is not a safety certification."
   ]

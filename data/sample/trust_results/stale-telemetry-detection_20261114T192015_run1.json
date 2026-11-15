@@ -1,0 +1,156 @@
+{
+  "schema": "aegis.trust-result/1",
+  "scenario_id": "stale-telemetry-detection",
+  "scenario_sha256": "9a99f3779aedcddd5c40a5d7c6cfeb3b103fe61c34124311417fd4b39468f6eb",
+  "title": "Telemetry that stops changing is detected, reported and recorded",
+  "purpose": "Data that keeps arriving but no longer changes must not be shown as current. The operator must be warned and the event preserved. Requirement R-DATA-1.",
+  "status": "PASS",
+  "status_reason": "every criterion passed",
+  "started_utc_s": 1794701908.742,
+  "duration_s": 106.5,
+  "environment": {
+    "simulator": "px4_sitl",
+    "scenario_id": "open_field",
+    "provenance": "simulated",
+    "needs_fault_injection": true,
+    "devices": [
+      "backend host",
+      "PX4 SITL"
+    ],
+    "vehicle_source": "px4_sitl:sih_quadx",
+    "operation_class": "simulation"
+  },
+  "simulated_or_physical": "simulated",
+  "software": {
+    "aegis_version": "0.1.0",
+    "git_commit": "aa9549381bed0ba8f2600d1bd7a5379f2499631d",
+    "git_uncommitted_changes": false,
+    "python": "3.12.3",
+    "platform": "Linux-6.18.44-fc-v470-x86_64-with-glibc2.39"
+  },
+  "device": {
+    "model": null,
+    "machine": "x86_64",
+    "cpu_count": 2,
+    "hostname_sha256": "5bce98f73f3ed0c8"
+  },
+  "expected_behaviour": "A critical telemetry.frozen alert appears within 4 s of the data freezing. The frozen snapshots are labelled as injected. An incident package is produced and verifies. The vehicle continues its mission.",
+  "criteria": [
+    {
+      "id": "C1",
+      "description": "No telemetry alert before the fault",
+      "status": "PASS",
+      "expected": "no alert starting with ['nav.', 'telemetry.', 'battery.implausible', 'control.', 'security.', 'link.', 'gps.'] before the fault",
+      "observed": "alerts before the fault: none",
+      "safety_critical": false
+    },
+    {
+      "id": "C2",
+      "description": "Frozen data is alerted quickly",
+      "status": "PASS",
+      "expected": "alert telemetry.frozen within 4 s of the fault",
+      "observed": "raised after 2.23 s",
+      "safety_critical": true
+    },
+    {
+      "id": "C3",
+      "description": "Altered data is labelled",
+      "status": "PASS",
+      "expected": "altered data is labelled as injected",
+      "observed": "labelled",
+      "safety_critical": false
+    },
+    {
+      "id": "C4",
+      "description": "The mission is not interrupted by the monitors",
+      "status": "PASS",
+      "expected": "mission phase is one of ['active', 'returning', 'completed']",
+      "observed": "phase 'active'",
+      "safety_critical": false
+    },
+    {
+      "id": "C5",
+      "description": "The incident is preserved",
+      "status": "PASS",
+      "expected": "an incident package is produced",
+      "observed": "packaged",
+      "safety_critical": false
+    },
+    {
+      "id": "C6",
+      "description": "The preserved evidence verifies",
+      "status": "PASS",
+      "expected": "the incident package verifies against its manifest",
+      "observed": "manifest verified",
+      "safety_critical": false
+    },
+    {
+      "id": "C7",
+      "description": "The record of what AEGIS saw during the event is complete",
+      "status": "PASS",
+      "expected": "incident_completeness_at_least",
+      "observed": "100% of the expected state records; 0 s with none",
+      "safety_critical": false
+    },
+    {
+      "id": "C8",
+      "description": "The fault causes no other monitored alert (no false alarms)",
+      "status": "PASS",
+      "expected": "no monitored alert other than the ones this fault should cause",
+      "observed": "other alerts: none",
+      "safety_critical": false
+    },
+    {
+      "id": "C9",
+      "description": "After the test the operator's Return works; the vehicle lands",
+      "status": "PASS",
+      "expected": "after the test, the operator's Return is accepted and the vehicle lands and disarms",
+      "observed": "landed and disarmed",
+      "safety_critical": false
+    }
+  ],
+  "measurements": {
+    "alerts_before_fault": [],
+    "alert_raised_after_s": {
+      "telemetry.frozen": 2.23
+    },
+    "alert_cleared_after_fault_end_s": {},
+    "snapshot_labelled_during_fault": true,
+    "alerts_during_fault": [
+      "telemetry.frozen"
+    ],
+    "flight_modes_during_fault": [
+      "MISSION"
+    ],
+    "mission_phase_after_fault": "active",
+    "bridge_restarts_during_fault": 0,
+    "incident_state_record_fraction": 1.002,
+    "incident_seconds_without_records": 0,
+    "incident_seconds_without_link": 0.0,
+    "incident_packaged": true,
+    "incident_verifies": true,
+    "landed_after_test": true
+  },
+  "evidence": {
+    "session_id": "20261114T191331",
+    "incident_id": "INC-20261114T191851-04",
+    "incident_folder": "/home/claude/aegis-one/data/generated/sessions/20261114T191331/incidents/INC-20261114T191851-04",
+    "incident_manifest_sha256": "ed8f386ff2cefd13b3af8fb86298813763eedc1bc4c74e7981524a6b1eb4ede2",
+    "incident_completeness": {
+      "state_records": 421,
+      "state_records_expected_at_full_rate": 420,
+      "fraction_of_expected": 1.002,
+      "gaps_in_state_records": [],
+      "seconds_without_state_records": 0,
+      "state_records_without_link": 0,
+      "seconds_without_link": 0.0,
+      "note": "A record without a link holds the last values AEGIS had, marked connected=false; it is not a measurement of the vehicle."
+    }
+  },
+  "limitations": [
+    "The freeze repeats one snapshot inside AEGIS; the simulator keeps producing fresh data.",
+    "Built-in PX4 simulator only.",
+    "The fault is injected into AEGIS's copy of the telemetry; the vehicle itself keeps receiving correct data.",
+    "One run under one set of conditions. It does not show behaviour under other conditions, and it is not a safety certification."
+  ]
+}

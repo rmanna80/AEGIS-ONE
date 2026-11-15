@@ -13,8 +13,10 @@ application. It reuses the flight recorder, the hub, the audit log and the dashb
 | Session manifest | `session.json` written at start: software version and git commit, device, configuration (never the operator token), scenario and model hashes, clock domains |
 | Flight log | `flight.jsonl`: every state at 10 Hz, including while the link is down; every alert, mission change and injected fault |
 | Incident capture | Opens on any critical alert or when the operator marks one; closes 8 s after the alerts clear (or at 180 s) |
-| Incident package | A folder with the slice of the flight log (15 s before the trigger to the close), the audit records for the period, the session manifest, an incident summary, and a SHA-256 manifest |
+| Incident package | A folder with the slice of the flight log (15 s before the trigger to the close), the audit records for the period, the session manifest, an incident summary, the camera's frames in the same window when a camera was running, and a SHA-256 manifest |
+| Camera evidence | `detections.jsonl` (labels, boxes, tracks per frame) and, when the session may save camera video, `video.mp4` with one frame per row. A physical camera keeps boxes only by default; the package says why it has no video |
 | Anchor | The manifest's hash is written into the hash-chained audit log when the package is made |
+| Signature | `MANIFEST.sig`: the manifest signed with this device's Ed25519 key (fingerprint in the session manifest and the audit log) |
 | Export / import | Zip download from the dashboard or API; `scripts/incident_tool.py import` |
 | Playback | Any flight log or incident slice, with pause, seek and speed, and event markers |
 
@@ -65,9 +67,15 @@ cannot yet be put on one timeline.
 - Someone who edits a file and rewrites the manifest produces a package that verifies on its
   own. That is caught only by comparing the manifest hash with the `incident_packaged`
   record in the session's audit log. A unit test demonstrates both halves.
-- The audit log's own last hash has no external anchor, and nothing is signed. A person with
-  write access to the whole session folder can forge all of it consistently. Signing and
-  device identity are Phase 12.
+- Packages are signed with the device's key. A forger who edits a file and rewrites the
+  manifest breaks the signature; one who re-signs with their own key is caught only when
+  the package is checked against the device's known fingerprint
+  (`incident_tool.py verify <package> --trust <fingerprint>`). Unit tests demonstrate all
+  three cases.
+- What a signature cannot do: it is only as good as the key's protection (anyone who can
+  read the key file can sign anything), it carries no trusted time, and it says nothing
+  about whether the measurements were right. The audit log's own last hash still has no
+  external anchor.
 
 ## Limits
 
@@ -79,9 +87,14 @@ cannot yet be put on one timeline.
 - A record made while the link is down holds the last values received, marked
   `connected=false`. It is not a measurement of the vehicle.
 - One vehicle. Fleet sessions record the first vehicle only.
-- Not in a package: camera video, detections, maps, raw MAVLink, application logs, resource
-  use over time. Video and detections stay in the session folder; the package lists what it
-  omits.
+- Camera frames are kept in memory for the 15 s before a trigger and while the incident is
+  open (at most 3000 frames; the package records any it had to leave out). The session
+  video cannot be cut while it is being written, so packages carry their own copy.
+- Camera times are this computer's wall clock when the frame reached AEGIS, the same clock
+  as the flight log's `utc`, which is what lets both be cut to one window. They are not the
+  exposure time.
+- Not in a package: maps, raw MAVLink, application logs, resource use over time. The
+  package lists what it omits.
 - Alerts shown during playback are re-derived from the replayed states by the current
   software, and are labelled `replayed`. The alerts raised at the time are the `alert`
   records on the timeline. The two can differ if detection logic has changed since.

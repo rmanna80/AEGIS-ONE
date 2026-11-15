@@ -101,6 +101,10 @@ class Settings(BaseSettings):
     # monitors. Simulation mode and an attested simulator only. Off unless set.
     fault_injection: bool = False
 
+    # This computer's signing key for incident packages (created on first use, owner-only
+    # permissions, outside the repository). Never put it under the repository.
+    device_key: Path = Path.home() / ".config" / "aegis" / "device_ed25519.pem"
+
     # Address the API and dashboard listen on (read by scripts/run_backend.sh). Keep
     # 127.0.0.1 and reach a companion computer through an SSH tunnel; 0.0.0.0 exposes
     # the dashboard to the whole network over unencrypted HTTP.

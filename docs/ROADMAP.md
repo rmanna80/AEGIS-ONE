@@ -13,11 +13,11 @@
 | 6 | Cybersecurity and anomaly detection | Built and verified live on PX4 SITL (Demo 6: 8 of 8). Rule-based checks on the first vehicle only; no learned model; MAVLink is unsigned and the MAVSDK control port is open on all interfaces. |
 | 7 | Raspberry Pi integration | Built: setup script, companion MAVLink link, device health monitor, benchmark, systemd unit, guide. Done for the core path: installed, benchmarked and flown on the owner's Pi 5 (Demo 1, 5 of 5; Demo 3, 8 of 8; simulator on the PC). Demos 2, 4, 5 and 6 on the Pi not yet run. |
 | 8 | Hardware readiness and current-state assessment | Done as software and documentation: provenance by evidence, operation classes, interface inventory, Pi review, flight-controller readiness, measurement script. Pi measurements await the owner. See `docs/ASSESSMENT.md`, `docs/hardware/README.md`. |
-| 9 | AEGIS REPLAY | First end-to-end version built and verified live on PX4 SITL: session manifest, incident capture and packaging with a SHA-256 manifest, export/import, timeline, pause/seek/speed. See `docs/replay/README.md`. |
-| 10 | AEGIS TRUST scenario engine | Started: scenario and result contracts, a runner, two scenarios passing live. See `docs/trust/README.md`. |
-| 11 | Independent assurance (requirements, traceability, inventory, assurance cases) | Not started |
-| 12 | Cybersecurity and distributed trust | Not started (Phase 6 groundwork exists) |
-| 13 | Continuous validation and regression | Not started (results are saved in a comparable format) |
+| 9 | AEGIS REPLAY | First end-to-end version built and verified live on PX4 SITL: session manifest, incident packages with SHA-256 manifest and device signature, camera evidence in packages, export/import, timeline, pause/seek/speed. See `docs/replay/README.md`. |
+| 10 | AEGIS TRUST scenario engine | Under way: five scenarios (link loss, frozen data, GNSS loss, delayed data, bridge crash), suites with repeats and spread, any-of alerts, false-alarm and recovery criteria. See `docs/trust/README.md`. |
+| 11 | Assurance (requirements, hazards, traceability) | Started: 23 requirements and 10 hazards written by the developers, each requirement traced to unit tests and scenario criteria, `scripts/trace.py`. No formal hazard analysis and no independent review yet. See `docs/assurance/README.md`. |
+| 12 | Cybersecurity and distributed trust | Started: device signing key and signed incident packages, firewall script for the MAVSDK port (not yet checked from a second computer). MAVLink signing is not available in PX4 v1.17. |
+| 13 | Continuous validation and regression | Started: CI runs every unit test (including the requirement-link check) on each push; `scripts/compare_results.py` compares two suite runs. Scenario suites still run by hand, not in CI. |
 | 14 | Physical hardware validation | Not started. No physical flight hardware has been connected. |
 | 15 | Product demonstration, research report, customer discovery | Not started. No market claim has been tested with a prospective user. |
 
@@ -36,10 +36,17 @@ New services or applications are added only when one process can no longer do th
 
 ## Plan
 
+### Done in this iteration (2026-11-14)
+
+USB webcam adapter (physical, bench), camera evidence in incident packages, device
+signing key and signed packages, three new scenarios (GNSS loss, delayed data, bridge
+crash), suites with repeats, requirements and hazards with traceability, suite comparison,
+MAVSDK port firewall script. Four defects found by the new scenarios were fixed (see
+`docs/ASSESSMENT.md`).
+
 ### Phase 9: finish REPLAY
 
-1. Camera video, detections and map revisions in incident packages (they are recorded per
-   session already; the package only needs to slice them).
+1. Map revisions in incident packages (camera evidence is done).
 2. Fleet sessions: one flight log per vehicle, one timeline.
 3. An incident report (HTML/PDF) generated from `incident.json`.
 4. Clock offset estimate between the companion computer and the PC, with its uncertainty,
@@ -51,12 +58,13 @@ New services or applications are added only when one process can no longer do th
 
 ### Phase 10: TRUST scenario engine
 
-1. Scenario suites, batch runs, and N repeats with the spread reported.
-2. More faults: delay, packet loss, sensor dropout, storage full, CPU and memory pressure.
+1. Suites and repeats are done. Next: a results view on the dashboard.
+2. More faults: packet loss, sensor dropout, storage full, CPU and memory pressure (delay,
+   GNSS loss and a bridge crash are done).
 3. Faults that reach the simulated vehicle (PX4 failure injection, simulator-side GNSS
    loss), kept inside the simulator.
-4. Crash tests: kill the backend, the MAVSDK server and the camera bridge mid-flight;
-   measure detection, recovery and what the record lost.
+4. Crash tests: the MAVSDK bridge crash is done. Next: the backend itself and the camera
+   bridge, mid-flight; measure detection, recovery and what the record lost.
 5. The existing demos (1 to 6) expressed as scenarios, so there is one test format.
 6. A provoked separation Hold for the fleet (open since Phase 5).
 

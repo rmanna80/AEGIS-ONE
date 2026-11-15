@@ -18,6 +18,14 @@ from aegis.contracts import (
 )
 from aegis.missions import Geofence, Mission, MissionConstraints, Waypoint
 
+
+@pytest.fixture(autouse=True)
+def _device_key_in_tmp(tmp_path_factory: pytest.TempPathFactory, monkeypatch: pytest.MonkeyPatch):  # type: ignore[no-untyped-def]
+    """Tests sign with a throwaway key, never the real one in ~/.config/aegis."""
+    folder = tmp_path_factory.mktemp("device-key")
+    monkeypatch.setenv("AEGIS_DEVICE_KEY", str(folder / "device_ed25519.pem"))
+
+
 HOME = GeodeticPosition(latitude_deg=47.397742, longitude_deg=8.545594, altitude_amsl_m=489.4)
 
 

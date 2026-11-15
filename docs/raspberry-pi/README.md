@@ -182,3 +182,86 @@ round trip, and camera frame rate and detection time when perception is on):
 Run it while a demo is in flight. The full procedure, and the list of what has and has not
 been verified on the Pi, is in [docs/hardware/README.md](../hardware/README.md), section 3.
 
+
+## Part 4: The USB webcam (a physical camera on the bench)
+
+Your USB webcam is AEGIS's first physical sensor. Plugged into the Pi, it is labelled
+`physical` and shown as a **bench camera**: it is not on any vehicle, so what it sees has
+nothing to do with the simulated flight, and AEGIS never places its detections in the
+world. Detection is by object class only; nobody is identified.
+
+After `git pull`, reinstall once (a signing library was added):
+
+```bash
+cd ~/AEGIS-ONE && git pull && .venv/bin/pip install -e '.[perception]'
+```
+
+### 1. Check the camera and measure the detector on it
+
+Stop the backend first if it is running (only one program can open the camera).
+
+```bash
+cd ~/AEGIS-ONE
+v4l2-ctl --list-devices                         # optional: sudo apt install v4l-utils
+.venv/bin/python scripts/camera_check.py --seconds 30
+```
+
+It finds the webcam by its driver (on a Pi 5, `/dev/video0` is the camera interface, not
+the webcam), then reports what format it agreed to, how many frames per second it really
+delivers, how fast the detector processes them, how many it had no time for, and the
+temperature before and after. Nothing is saved but the numbers
+(`data/generated/camera_checks/`). Add `--snapshot` to save one picture if you want to see
+what it sees.
+
+### 2. Use it in AEGIS
+
+In the Pi's `.env`:
+
+```bash
+AEGIS_CAMERA=usb
+```
+
+Then start the simulator on the PC and the backend on the Pi as in Part 3. The dashboard's
+camera panel shows **PHYSICAL**, the bench-camera notice, the camera's delivered frame
+rate, the share of frames not processed, and what is being recorded. By default the
+**video is not saved** (it would record your room and anyone in it); labels and boxes
+are. Set `AEGIS_RECORD_CAMERA_VIDEO=always` if you want the video kept.
+
+Measure everything together during a flight:
+
+```bash
+.venv/bin/python scripts/edge_measure.py --seconds 90 --peer 192.168.1.7 --label "Pi 5, webcam, Demo 1"
+```
+
+## Part 5: Close the MAVSDK control port to the network
+
+The MAVSDK server listens on port 50051 on every network interface, and it cannot be told
+not to. Anyone on your network who can reach it can command the autopilot without the
+operator token. Close it to other computers:
+
+```bash
+sudo bash scripts/lock_mavsdk_port.sh
+```
+
+Then check **from your PC** (the Pi cannot test itself):
+
+```bash
+nc -zv 192.168.1.57 50051        # must fail or time out
+```
+
+To keep the rule after a reboot, install `deploy/aegis-firewall.service` (instructions at
+the top of that file). To undo: `sudo bash scripts/lock_mavsdk_port.sh --remove`.
+
+## Part 6: This Pi's signing key
+
+Incident packages made on the Pi are signed with a key that only the Pi has
+(`~/.config/aegis/device_ed25519.pem`, created the first time it is needed, readable by
+you only). See its fingerprint with:
+
+```bash
+.venv/bin/python scripts/device_key.py
+```
+
+Write that fingerprint down somewhere else. To check a package came from this Pi:
+`python scripts/incident_tool.py verify <package> --trust <fingerprint>`. Never copy the
+key file into the repository or share it.

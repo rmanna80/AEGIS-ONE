@@ -481,3 +481,25 @@ async def test_a_physical_camera_incident_has_boxes_and_says_why_there_is_no_vid
     assert "physical camera" in camera["why_no_video"]
     assert camera["provenance"] == "physical" and camera["mount"] == "bench"
     assert not (folder / "video.mp4").exists()
+
+
+async def test_packages_are_signed_by_the_device_and_the_audit_log_says_by_whom(
+    tmp_path: Path,
+) -> None:
+    from aegis.identity import DeviceKey
+
+    hub, vehicle, manager, _ = await session(tmp_path)
+    manager.signer = DeviceKey.load_or_create(tmp_path / "device.pem")
+    await fly(hub, vehicle, 5)
+    manager.mark("signed")
+    await fly(hub, vehicle, 3)
+    await manager.stop()
+    incident = manager.incidents[-1]
+    assert incident["signed_by"] == manager.signer.fingerprint
+    document = manager.document(str(incident["incident_id"]))
+    assert document is not None
+    assert document["verification"]["valid"]
+    assert document["signature"]["valid"] and document["signature"]["key_trusted"]
+    records = [json.loads(x) for x in (tmp_path / "audit.jsonl").read_text().splitlines()]
+    [packaged] = [r for r in records if r["event"] == "incident_packaged"]
+    assert packaged["signed_by"] == manager.signer.fingerprint

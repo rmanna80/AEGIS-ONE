@@ -1,0 +1,175 @@
+{
+  "schema": "aegis.trust-result/1",
+  "scenario_id": "bridge-crash-recovery",
+  "scenario_sha256": "360d43180e643965bb895dbe1845388414e3cfd5225ed7f06a93edea1b3e3bba",
+  "title": "AEGIS recovers when its MAVLink bridge process crashes in flight",
+  "purpose": "The MAVSDK bridge is a separate process; if it dies AEGIS loses its view and its commands. AEGIS must say so at once, restart it, report honestly what it no longer knows, and give the operator back working commands. Requirement R-CRASH-1.",
+  "status": "PASS",
+  "status_reason": "every criterion passed",
+  "started_utc_s": 1794702928.065,
+  "duration_s": 135.0,
+  "environment": {
+    "simulator": "px4_sitl",
+    "scenario_id": "open_field",
+    "provenance": "simulated",
+    "needs_fault_injection": true,
+    "devices": [
+      "backend host",
+      "PX4 SITL"
+    ],
+    "vehicle_source": "px4_sitl:sih_quadx",
+    "operation_class": "simulation"
+  },
+  "simulated_or_physical": "simulated",
+  "software": {
+    "aegis_version": "0.1.0",
+    "git_commit": "aa9549381bed0ba8f2600d1bd7a5379f2499631d",
+    "git_uncommitted_changes": false,
+    "python": "3.12.3",
+    "platform": "Linux-6.18.44-fc-v470-x86_64-with-glibc2.39"
+  },
+  "device": {
+    "model": null,
+    "machine": "x86_64",
+    "cpu_count": 2,
+    "hostname_sha256": "5bce98f73f3ed0c8"
+  },
+  "expected_behaviour": "The bridge process is killed (SIGKILL). Data stops arriving; within 3 s AEGIS raises telemetry.stale (data older than 2 s) or, if the outage outlasts the 3 s link timeout, link.lost. AEGIS restarts the bridge and the alert clears within 30 s. PX4 keeps flying its mission throughout. AEGIS marks the mission as no longer tracked instead of showing stale progress. The incident package is produced, verifies and is complete. No other alert (in particular not telemetry.frozen, which would misdiagnose a stall as data that keeps arriving unchanged). After recovery the operator's Return is accepted and the vehicle lands.",
+  "criteria": [
+    {
+      "id": "C1",
+      "description": "No monitored alert before the crash",
+      "status": "PASS",
+      "expected": "no alert starting with ['nav.', 'telemetry.', 'battery.implausible', 'control.', 'security.', 'link.', 'gps.'] before the fault",
+      "observed": "alerts before the fault: none",
+      "safety_critical": false
+    },
+    {
+      "id": "C2",
+      "description": "The operator is told data has stopped arriving",
+      "status": "PASS",
+      "expected": "alert link.lost or telemetry.stale within 3 s of the fault",
+      "observed": "raised after 2.22 s",
+      "safety_critical": true
+    },
+    {
+      "id": "C3",
+      "description": "AEGIS restarts the bridge",
+      "status": "PASS",
+      "expected": "AEGIS notices the dead bridge and restarts it",
+      "observed": "1 restart(s)",
+      "safety_critical": false
+    },
+    {
+      "id": "C4",
+      "description": "Data is current again within 30 s",
+      "status": "PASS",
+      "expected": "alert link.lost or telemetry.stale clears within 30 s of the fault ending",
+      "observed": "cleared 4.04 s after the fault ended",
+      "safety_critical": false
+    },
+    {
+      "id": "C5",
+      "description": "PX4 keeps flying its mission throughout",
+      "status": "PASS",
+      "expected": "whenever connected, the autopilot reports one of ['MISSION']",
+      "observed": "modes reported: ['MISSION']",
+      "safety_critical": false
+    },
+    {
+      "id": "C6",
+      "description": "AEGIS reports it lost track of the mission instead of showing stale progress",
+      "status": "PASS",
+      "expected": "mission phase is one of ['failed']",
+      "observed": "phase 'failed'",
+      "safety_critical": false
+    },
+    {
+      "id": "C7",
+      "description": "After recovery the operator's Return works; the vehicle lands",
+      "status": "PASS",
+      "expected": "after the test, the operator's Return is accepted and the vehicle lands and disarms",
+      "observed": "landed and disarmed",
+      "safety_critical": true
+    },
+    {
+      "id": "C8",
+      "description": "The incident is preserved",
+      "status": "PASS",
+      "expected": "an incident package is produced",
+      "observed": "packaged",
+      "safety_critical": false
+    },
+    {
+      "id": "C9",
+      "description": "The preserved evidence verifies",
+      "status": "PASS",
+      "expected": "the incident package verifies against its manifest",
+      "observed": "manifest verified",
+      "safety_critical": false
+    },
+    {
+      "id": "C10",
+      "description": "The record of what AEGIS saw during the event is complete",
+      "status": "PASS",
+      "expected": "incident_completeness_at_least",
+      "observed": "100% of the expected state records; 0 s with none",
+      "safety_critical": false
+    },
+    {
+      "id": "C11",
+      "description": "The crash causes no other monitored alert",
+      "status": "PASS",
+      "expected": "no monitored alert other than the ones this fault should cause",
+      "observed": "other alerts: none",
+      "safety_critical": false
+    }
+  ],
+  "measurements": {
+    "alerts_before_fault": [],
+    "alert_raised_after_s": {
+      "link.lost or telemetry.stale": 2.22
+    },
+    "alert_cleared_after_fault_end_s": {
+      "link.lost or telemetry.stale": 4.04
+    },
+    "snapshot_labelled_during_fault": false,
+    "alerts_during_fault": [
+      "link.lost",
+      "telemetry.stale"
+    ],
+    "flight_modes_during_fault": [
+      "MISSION"
+    ],
+    "mission_phase_after_fault": "failed",
+    "bridge_restarts_during_fault": 1,
+    "incident_state_record_fraction": 1.0,
+    "incident_seconds_without_records": 0,
+    "incident_seconds_without_link": 2.0,
+    "incident_packaged": true,
+    "incident_verifies": true,
+    "landed_after_test": true
+  },
+  "evidence": {
+    "session_id": "20261114T191331",
+    "incident_id": "INC-20261114T193551-14",
+    "incident_folder": "/home/claude/aegis-one/data/generated/sessions/20261114T191331/incidents/INC-20261114T193551-14",
+    "incident_manifest_sha256": "0e7788462aa152783ef8d876ee9086ae12286f084d7742f20f4907b7008dc481",
+    "incident_completeness": {
+      "state_records": 260,
+      "state_records_expected_at_full_rate": 260,
+      "fraction_of_expected": 1.0,
+      "gaps_in_state_records": [],
+      "seconds_without_state_records": 0,
+      "state_records_without_link": 20,
+      "seconds_without_link": 2.0,
+      "note": "A record without a link holds the last values AEGIS had, marked connected=false; it is not a measurement of the vehicle."
+    }
+  },
+  "limitations": [
+    "One way for the bridge to fail (killed outright). A bridge that hangs, or answers slowly, is not tested.",
+    "The autopilot is never touched; this tests AEGIS's recovery, not the vehicle's.",
+    "The fault is injected into AEGIS's copy of the telemetry; the vehicle itself keeps receiving correct data.",
+    "One run under one set of conditions. It does not show behaviour under other conditions, and it is not a safety certification."
+  ]
+}
